@@ -35,6 +35,21 @@ class Game:
         characters=None,
         custom_actions=None
     ):
+        """
+        Initializes a game instance with a starting location, a player character, and optional non-player characters and
+        custom actions. This constructor method sets up the game environment, including the player's starting position,
+        game history, and the parser for handling commands.
+
+        Args:
+            start_at (Location): The starting location of the player in the game.
+            player (Character): The player character controlled by the user.
+            characters (list, optional): A list of additional characters (NPCs) to include in the game.
+            custom_actions (list, optional): A list of custom actions to be added to the game's parser.
+
+        Returns:
+            None
+        """
+
         self.start_at = start_at
         self.player = player
 
@@ -65,6 +80,17 @@ class Game:
 
         # Look up table for locations
         def location_map(location, acc):
+            """
+            Recursively builds a mapping of locations starting from a given location. This function populates an accumulator dictionary with location names as keys and their corresponding location objects as values, traversing through all connected locations.
+
+            Args:
+                location (Location): The starting location from which to build the mapping.
+                acc (dict): The accumulator dictionary that stores the mapping of location names to location objects.
+
+            Returns:
+                dict: The updated accumulator dictionary containing the mapped locations.
+            """
+
             acc[location.name] = location
             for _, connection in location.connections.items():
                 if connection.name not in acc:
@@ -95,6 +121,16 @@ class Game:
                     seen_before[name] = True
 
     def set_parser(self, parser: parsing.Parser):
+        """
+        Sets the parser for the game instance, allowing for command parsing and handling. This method updates the parser attribute with the provided parser instance, enabling the game to process user input effectively.
+
+        Args:
+            parser (parsing.Parser): The parser instance to be assigned to the game.
+
+        Returns:
+            None
+        """
+
         self.parser = parser
 
     def game_loop(self):
@@ -460,6 +496,26 @@ class Game:
 
 # Override methods or implement a new class?
 class SurvivorGame(Game):
+    """
+    Represents a Survivor game that extends the base game functionality with specific mechanics for a competitive
+    environment. This class manages the game state, player interactions, voting sessions, and the overall flow of the
+    game, including tracking contestants and determining a winner.
+
+    Args:
+        start_at (Location): The starting location of the player in the game.
+        player (Character): The player character controlled by the user.
+        characters (list, optional): A list of additional characters (NPCs) to include in the game.
+        custom_actions (list, optional): A list of custom actions to be added to the game's parser.
+        max_ticks (int, optional): The maximum number of ticks per round, defaulting to 10.
+        num_finalists (int, optional): The number of finalists in the game, defaulting to 2.
+        experiment_name (str, optional): The name of the experiment, defaulting to "exp1".
+        experiment_id (int, optional): The ID of the experiment, defaulting to 1.
+        end_state_check (Literal, optional): The condition for checking the end state, defaulting to "on_round".
+
+    Returns:
+        None
+    """
+
     def __init__(self, 
                  start_at: Location, 
                  player: Character, 
@@ -470,6 +526,26 @@ class SurvivorGame(Game):
                  experiment_name: str = "exp1",
                  experiment_id: int = 1,
                  end_state_check: Literal["on_round", "on_tick", "on_action"] = "on_round"):
+        """
+        Initializes a SurvivorGame instance with a starting location, a player character, and optional non-player
+        characters and custom actions. This constructor method sets up the game environment, including game tracking
+        variables, logging, and the initial state of the game.
+
+        Args:
+            start_at (Location): The starting location of the player in the game.
+            player (Character): The player character controlled by the user.
+            characters (list, optional): A list of additional characters (NPCs) to include in the game.
+            custom_actions (list, optional): A list of custom actions to be added to the game's parser.
+            max_ticks (int, optional): The maximum number of ticks per round, defaulting to 10.
+            num_finalists (int, optional): The number of finalists in the game, defaulting to 2.
+            experiment_name (str, optional): The name of the experiment, defaulting to "exp1".
+            experiment_id (int, optional): The ID of the experiment, defaulting to 1.
+            end_state_check (Literal, optional): The condition for checking the end state, defaulting to "on_round".
+
+        Returns:
+            None
+        """
+
         super().__init__(start_at, player, characters, custom_actions)
         game_logger = logger.CustomLogger(experiment_name=experiment_name, sim_id=experiment_id)
         self.logger = game_logger.get_logger()
@@ -497,6 +573,18 @@ class SurvivorGame(Game):
         self._log_starting_locs()
 
     def update_world_info(self):
+        """
+        Updates the world information for the game, including details about the contestants and the current game state.
+        This method constructs a dictionary of parameters that reflect the current status of the game and formats it
+        into a world information string.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         params = {"contestant_count": len(self.characters),
                   "contestant_names_locs": ", ".join([f"{c.name} who is at {c.location.name}" 
                                                       for c in self.characters.values() 
@@ -508,6 +596,17 @@ class SurvivorGame(Game):
     
     # Override game loop 
     def game_loop(self):
+        """
+        Executes the main game loop, managing the progression of the game through rounds and ticks. This method handles
+        character turns, goal setting, and checks for game-ending conditions, while also saving the game state and
+        logging relevant data.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
 
         while True:
             for tick in range(self.max_ticks_per_round):
@@ -554,10 +653,32 @@ class SurvivorGame(Game):
             self.save_game("test_file.json")
 
     def reset_character_dialogue(self):
+        """
+        Resets the dialogue state for all characters in the game. This method sets each character's dialogue participant
+        to None, effectively clearing any previous interactions.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         for c in self.characters.values():
             c.set_dialogue_participant(talked_to=None)
 
     def goal_setting_handler(self):
+        """
+        Handles the goal-setting process for all characters at the beginning of a round. This method updates the world
+        information and prompts each character to generate their goals based on the current game state.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         # if it is the beginning of a round, everyone should make goals
         if self.tick == 0:
             for character in self.characters.values():
@@ -566,6 +687,18 @@ class SurvivorGame(Game):
                 character.generate_goals(self)
 
     def turn_handler(self, character):
+        """
+        Handles the turn for a specified character during the game. This method sets the current player, updates the
+        world information, and processes the character's actions, allowing for a maximum of three attempts to
+        successfully enact a command.
+
+        Args:
+            character (Character): The character whose turn is being processed.
+
+        Returns:
+            None
+        """
+
         # set the current player to the game's "player" for description purposes
         self.player = character
         
@@ -592,6 +725,14 @@ class SurvivorGame(Game):
                 break
 
     def is_game_over(self) -> bool:
+        """
+        Checks whether the game has ended by evaluating the game state. This method returns True if the game is marked
+        as over or if the winning conditions have been met.
+
+        Returns:
+            bool: True if the game is over; otherwise, False.
+        """
+
         if self.game_over:
             return True
         return self.is_won()
@@ -607,6 +748,21 @@ class SurvivorGame(Game):
         return False
             
     def _should_enact_command(self, command):
+        """
+        Determines whether a command should be enacted based on its type and specific value. This method evaluates if
+        the command is an integer or a string, returning False for the integer value -999 and raising an error for
+        unsupported types.
+
+        Args:
+            command (Union[int, str]): The command to evaluate for enactment.
+
+        Returns:
+            bool: True if the command can be enacted; otherwise, False.
+
+        Raises:
+            ValueError: If the command is neither an integer nor a string.
+        """
+
         if isinstance(command, int):
             if command == -999:
                 return False
@@ -616,10 +772,33 @@ class SurvivorGame(Game):
             raise ValueError(f"command: {command} must be str or int; got {type(command)}")
 
     def view_character_locations(self):
+        """
+        Displays the current locations of all characters in the game. This method iterates through the characters and
+        prints each character's name along with the name of the location they are currently in.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         for name, char in self.characters.items():
             print(f"{name} is in {char.location.name}\n")
 
     def handle_voting_sessions(self):
+        """
+        Manages the voting sessions in the game based on the current state of the characters. This method triggers a
+        jury session if the number of characters matches the number of finalists, or initiates a voting session to
+        exile a character if the end of a round is reached.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         if len(self.characters) == self.num_finalists:
             # This should trigger the end of game
             self.run_jury_session()
@@ -628,11 +807,34 @@ class SurvivorGame(Game):
             self.run_voting_session()
 
     def update_voting_history(self, session: "VotingSession"):
+        """
+        Updates the voting history for the current round based on the results from a voting session. This method records
+        each character's vote and stores it in the voting history for the round.
+
+        Args:
+            session (VotingSession): The voting session containing the results to be recorded.
+
+        Returns:
+            None
+        """
+
         for char in self.characters.values():
             record = session.record_vote(char)
             self.voting_history[self.round].update({char.name: record})
 
     def run_voting_session(self):
+        """
+        Conducts a voting session among the characters in the game to determine which character will be exiled. This
+        method initializes a voting session, processes the votes, updates the voting history, manages the exile state,
+        and logs the exiled character's status.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         self.vote_session = VotingSession(game=self, 
                                           participants=self.characters.values())
         self.vote_session.run()
@@ -644,11 +846,33 @@ class SurvivorGame(Game):
         print(f"{exiled.name} was exiled from the group and now sits on the jury.")
 
     def _log_exiled_player(self, exiled):
+        """
+        Logs the details of a player who has been exiled from the game. This method records the exiled player's name and
+        their position among the remaining contestants in the voting session.
+
+        Args:
+            exiled (Character): The character that has been exiled from the game.
+
+        Returns:
+            None
+        """
+
         contestants_remaining = len(self.characters)
         message = f"{exiled.name} was exiled. Position: {contestants_remaining + 1}"
         self.vote_session.log_vote(exiled, message=message)
 
     def _log_gpt_call_data(self):
+        """
+        Logs the current counts of GPT calls and tokens processed during the game. This method retrieves logging extras,
+        constructs messages for the current counts, and records them using the logger for debugging purposes.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         extras = get_logger_extras(self, character=None)
         extras["type"] = "Calls"
         message = f"Current GPT calls count: {GptCallHandler.get_calls_count()}"
@@ -659,11 +883,35 @@ class SurvivorGame(Game):
         self.logger.debug(msg=message, extra=extras)
 
     def _log_action(self, character, message):
+        """
+        Logs an action performed by a character during the game. This method constructs logging extras for the specified
+        character and records the action message at the debug level for tracking purposes.
+
+        Args:
+            character (Character): The character performing the action.
+            message (str): The message describing the action taken by the character.
+
+        Returns:
+            None
+        """
+
         extras = get_logger_extras(self, character)
         extras["type"] = "Act"
         self.logger.debug(msg=message, extra=extras)
 
-    def update_exile_state(self, exiled_agent):        
+    def update_exile_state(self, exiled_agent):
+        """
+        Updates the state of the game by processing the effects of an exiled agent on all characters. This method
+        manages the memories of each character regarding the exile, removes the exiled character from the game, and
+        updates the jury with the exiled agent's information.
+
+        Args:
+            exiled_agent (Character): The character that has been exiled from the game.
+
+        Returns:
+            None
+        """
+
         # Loop over them
         for character in list(self.characters.values()):
             # Pass appropriate memories to each agent
@@ -697,10 +945,35 @@ class SurvivorGame(Game):
                                         actor_id=character.id)
         
     def add_exiled_to_jury(self, exiled):
+        """
+        Adds an exiled character to the jury for the game. This method updates the jury list by including the exiled
+        character, allowing them to participate in the final voting process.
+
+        Args:
+            exiled (Character): The character that has been exiled and is to be added to the jury.
+
+        Returns:
+            None
+        """
+
         # exile_key = f"{exiled.name}_{exiled.id}".replace(" ", "")
         self.jury.update({exiled.name: exiled})
 
     def add_exile_memory(self, character, exiled_name: str, to_jury: bool = False):
+        """
+        Records the memory of a character regarding the exile event, detailing the voting outcome and the character's
+        status. This method constructs a description based on whether the character was exiled or survived the vote, and
+        updates the character's memory with relevant information.
+
+        Args:
+            character (Character): The character whose memory is being updated.
+            exiled_name (str): The name of the character that has been exiled.
+            to_jury (bool, optional): Indicates whether the character is being added to the jury; defaults to False.
+
+        Returns:
+            None
+        """
+
         vote_count = self.vote_session.tally.get(character.name)
         vote_total = self.vote_session.tally.total()
         if to_jury:
@@ -730,6 +1003,18 @@ class SurvivorGame(Game):
                                     actor_id=character.id)
         
     def run_jury_session(self):
+        """
+        Conducts a jury session to determine the winner of the game among the finalists. This method initializes a
+        voting session with the jury members, processes the votes, updates the voting history, and logs the winner while
+        also storing the winner's memory.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         finalists = list(self.characters.values())
         self.final_vote = JuryVotingSession(game=self,
                                             jury_members=list(self.jury.values()), 
@@ -743,6 +1028,17 @@ class SurvivorGame(Game):
         self._add_winner_memory()
 
     def _log_finalists(self, winner):
+        """
+        Logs the results of the finalists in the game, indicating the winner and their position. This method iterates
+        through all characters, recording a message for each character that reflects whether they won or lost the game.
+
+        Args:
+            winner (Character): The character who has won the game.
+
+        Returns:
+            None
+        """
+
         for char in self.characters.values():
             if char == winner:
                 message = f"{char.name} won the game. Position: 1"
@@ -751,7 +1047,19 @@ class SurvivorGame(Game):
                 message = f"{char.name} lost the game. Position: 2"
             self.vote_session.log_vote(char, message=message)
             
-    def _add_winner_memory(self):      
+    def _add_winner_memory(self):
+        """
+        Records the memory of the winner for all characters in the game. This method constructs a description of the
+        winning event, including the vote count, and updates the memory of each character with this information for
+        future reference.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         vote_count = self.final_vote.tally.get(self.winner.name)
         vote_total = self.final_vote.tally.total()
         description = vote_prompt.winner_memory_description.format(winner=self.winner.name,
@@ -773,6 +1081,18 @@ class SurvivorGame(Game):
                                 actor_id=c.id)
             
     def _log_starting_locs(self):
+        """
+        Logs the starting locations of all characters in the game. This method iterates through each character,
+        constructs a log message indicating their starting point, and records it using the logger for debugging
+        purposes.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         for c in self.characters.values():
             extras = get_logger_extras(self, c)
             extras["type"] = "Origin"
@@ -780,6 +1100,18 @@ class SurvivorGame(Game):
             self.logger.debug(msg=message, extra=extras)
 
     def save_simulation_data(self):
+        """
+        Saves the current simulation data, including voting history, character goals, and goal scores, to JSON files.
+        This method organizes the data into specific directories based on the experiment name and ID, ensuring that all
+        relevant information is stored for later analysis.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
         output_path = get_output_logs_path()
         experiment_dir = f"logs/{self.experiment_name}-{self.experiment_id}/"
         fp = os.path.join(output_path, experiment_dir, f"voting_history_{self.experiment_name}-{self.experiment_id}.json")

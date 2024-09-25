@@ -4,29 +4,82 @@ Author: Samuel Thudium (sam.thudium1@gmail.com)
 File: agent/memory_structures/memory_stream.py
 Description: Defines Agent memory classes
 """
-from __future__ import annotations
-from typing import TYPE_CHECKING, List, Literal, Tuple, Union
-from enum import Enum
-from collections import defaultdict
-from dataclasses import dataclass, field
-import re
-import numpy as np
-from spacy import load as spacyload
-# from uuid import uuid4
+
+from __future__ import annotations  # Enables postponed evaluation of type annotations
+from typing import (
+    TYPE_CHECKING,
+    List,
+    Literal,
+    Tuple,
+    Union,
+)  # Importing type hints for better type checking
+from enum import Enum  # Importing Enum for defining enumerated constants
+from collections import (
+    defaultdict,
+)  # Importing defaultdict for easier dictionary handling
+from dataclasses import (
+    dataclass,
+    field,
+)  # Importing dataclass for creating classes with minimal boilerplate
+import re  # Importing re for regular expression operations
+import numpy as np  # Importing NumPy for numerical operations
+from spacy import load as spacyload  # Importing spaCy for natural language processing
+
+# from uuid import uuid4  # Uncomment to use UUIDs for unique identifiers
 
 # Local imports
+# Importing utility functions for OpenAI client setup and text embedding
 from ..utils.general import set_up_openai_client, get_text_embedding
+
 if TYPE_CHECKING:
-    from ..things.characters import Character
+    from ..things.characters import (
+        Character,
+    )  # Importing Character type for type checking only
+
 
 class MemoryType(Enum):
-    ACTION = 1
-    DIALOGUE = 2
-    REFLECTION = 3
-    PERCEPT = 4
+    """Enumeration for different types of memory.
+
+    This class defines various memory types that can be used in the context of an agent's memory system. 
+    Each memory type represents a distinct category of information that the agent can store and recall.
+
+    Attributes:
+        ACTION (int): Represents an action memory type.
+        DIALOGUE (int): Represents a dialogue memory type.
+        REFLECTION (int): Represents a reflection memory type.
+        PERCEPT (int): Represents a perception memory type.
+    """
+
+    ACTION = 1  # Represents an action memory type
+    DIALOGUE = 2  # Represents a dialogue memory type
+    REFLECTION = 3  # Represents a reflection memory type
+    PERCEPT = 4  # Represents a perception memory type
+
 
 @dataclass
 class ObservationNode:
+    """Represents an observation made by an agent during a specific round and tick.
+
+    This class encapsulates all relevant information about an observation, including its unique identifier, 
+    the round and tick at which it occurred, the level of the observation, and additional metadata such as location, 
+    description, success status, and importance. It is designed to facilitate the storage and retrieval of observations 
+    within the agent's memory system.
+
+    Attributes:
+        node_id (int): Unique identifier for the observation, representing its index in the agent's memory.
+        node_round (int): The round in which the observation occurred.
+        node_tick (int): The tick within the round when the observation was made.
+        node_level (int): The level of the observation (1 for novel, 2 for reflections, etc.).
+        node_loc (str): The location where the observation took place.
+        node_description (str): A description of the observation.
+        node_success (bool): Indicates whether the observation was successful.
+        embedding_key (int): Key for retrieving the embedding associated with the observation.
+        node_importance (int): The importance of the observation, which could also be a float.
+        node_is_self (int): ID of the agent making the observation, if relevant.
+        node_type (str, optional): The type of observation.
+        node_keywords (set): A set of keywords associated with the observation.
+    """
+
     node_id: int  # TODO: unique to this agent; represents the index in their memory
     node_round: int  # The round in which this occurred
     node_tick: int  # The round tick on which this observation occurred
@@ -34,94 +87,198 @@ class ObservationNode:
     node_loc: str  # The name of the location in which the observation occurred
     node_description: str
     node_success: bool
-    embedding_key: int  # Immediately get and store the embedding for faster retrieval later?
+    embedding_key: (
+        int  # Immediately get and store the embedding for faster retrieval later?
+    )
     node_importance: int  # or could be float
     node_is_self: int  # ID of the agent making the observation, if relevant
     node_type: str = None  # the type of Observation
-    node_keywords: set = field(default_factory=set)  # Keywords that were discovered in this node
-    # associated_nodes: Optional[list[int]] = field(default_factory=list) 
+    node_keywords: set = field(
+        default_factory=set
+    )  # Keywords that were discovered in this node
+    # associated_nodes: Optional[list[int]] = field(default_factory=list)
 
 
-class MemoryStream:
+class MemoryType(Enum):
+    """Enumeration for different types of memory.
+
+    This class defines various memory types that can be used in the context of an agent's memory system.
+    Each memory type represents a distinct category of information that the agent can store and recall.
+
+    Attributes:
+        ACTION: Represents an action memory type.
+        DIALOGUE: Represents a dialogue memory type.
+        REFLECTION: Represents a reflection memory type.
+        PERCEPT: Represents a perception memory type.
+    """
+
     # store stopwords as a class variable for efficient access when adding new memories
     _stopwords = None
 
     @classmethod
     def _generate_stopwords(cls):
-        if cls._stopwords is None:
-            nlp = spacyload('en_core_web_sm', disable=['ner', 'tagger', 'parser', 'textcat'])
-            cls._stopwords = nlp.Defaults.stop_words
-        return cls._stopwords
+        """Generates and retrieves a set of stopwords for natural language processing.
+
+        This class method initializes the stopwords from the spaCy library if they have not been generated yet.
+        It returns the set of stopwords, which can be used to filter out common words in text processing.
+
+        Returns:
+            set: A set of stopwords used in natural language processing.
+        """
+
+        if cls._stopwords is None:  # Check if the stopwords have not been initialized
+            nlp = spacyload(
+                "en_core_web_sm", disable=["ner", "tagger", "parser", "textcat"]
+            )  # Load the spaCy English model with specific components disabled
+            cls._stopwords = (
+                nlp.Defaults.stop_words
+            )  # Assign the default stopwords from the spaCy model to the class variable
+        return cls._stopwords  # Return the set of stopwords
 
     def __init__(self, character: "Character"):
-        """
-        Defines Agent's memory via a dict of ObservationNodes. These
-        are split by the round in which they occured.
+        """Initializes an agent with identifying information and memory features.
+
+        This constructor sets up the agent's identity based on the provided character and initializes various attributes
+        related to memory management, observations, and relevancy scoring. It also establishes a connection to an OpenAI
+        client and prepares the agent's stopwords for natural language processing.
 
         Args:
-            agent_id (int): thing.Thing.id for this agent
-        """
-        # keep track of this agent's identifying info:
-        self.agent_id = character.id  # would be good to store who this belongs to in case we need to reload a game
-        self.agent_name = character.name
-        self.agent_description = character.description
-        
-        self.num_observations = 0
-        self.observations = []
-        
-        self.memory_embeddings = {}  # keys are the index of the observation
-        self.keyword_nodes = defaultdict(lambda: defaultdict(list))
-        self.memory_type_nodes = defaultdict(list)  # keys are the value of the MemoryType enum
-        self.this_round_nodes = defaultdict(list)  # keys are the round number
+            character (Character): The character object containing identifying information for the agent.
 
-        # A cache of the current querying statements about this agent
-        # Cached embeddings of: Persona summary, goals, personal relationships
-        # These will be used in the memory retrieval process
-        self.query_embeddings = self.set_query_embeddings(character)
+        Attributes:
+            agent_id (str): The unique identifier for the agent.
+            agent_name (str): The name of the agent.
+            agent_description (str): A description of the agent.
+            num_observations (int): The count of observations made by the agent.
+            observations (list): A list to store observations.
+            memory_embeddings (dict): A dictionary to store embeddings of observations.
+            keyword_nodes (defaultdict): A nested dictionary to categorize keywords.
+            memory_type_nodes (defaultdict): A dictionary to categorize memory types.
+            this_round_nodes (defaultdict): A dictionary to store observations by round number.
+            query_embeddings (dict): Cached embeddings for querying statements about the agent.
+            lookback (int): The number of observations available without retrieval.
+            gamma (float): The decay factor for memory importance.
+            reflection_capacity (int): The number of reflections after each round.
+            reflection_distance (int): The number of observations for reflection.
+            reflection_rounds (int): The number of rounds for looking back.
+            importance_alpha (float): Weight for importance in relevancy scoring.
+            recency_alpha (float): Weight for recency in relevancy scoring.
+            relevance_alpha (float): Weight for relevance in relevancy scoring.
+            client: The OpenAI client instance for this agent.
+            stopwords (set): A set of stopwords for natural language processing.
+        """
+
+        # Keep track of this agent's identifying information
+        self.agent_id = (
+            character.id
+        )  # Store the character's ID for potential game reloads
+        self.agent_name = character.name  # Store the character's name
+        self.agent_description = (
+            character.description
+        )  # Store the character's description
+
+        self.num_observations = (
+            0  # Initialize the count of observations made by the agent
+        )
+        self.observations = []  # List to hold the agent's observations
+
+        self.memory_embeddings = (
+            {}
+        )  # Dictionary to store embeddings of observations, indexed by observation index
+        self.keyword_nodes = defaultdict(
+            lambda: defaultdict(list)
+        )  # Nested dictionary for categorizing keywords
+        self.memory_type_nodes = defaultdict(
+            list
+        )  # Dictionary to categorize memory types using MemoryType enum values
+        self.this_round_nodes = defaultdict(
+            list
+        )  # Dictionary to store observations by the current round number
+
+        # Cache for current querying statements about this agent
+        # Cached embeddings include: persona summary, goals, and personal relationships
+        # These will assist in the memory retrieval process
+        self.query_embeddings = self.set_query_embeddings(
+            character
+        )  # Initialize query embeddings based on the character
 
         # Attributes defining the memory features of the agent
-        self.lookback = 5  # The number of observations immediately available without retrieval; also used to gather keys for retrieval
-        self.gamma = 0.95  # The decay factor for memory importance
-        self.reflection_capacity = 2  # The number of reflections to make after each round
-        self.reflection_distance = 200  # how many observations the agent can look back and reflect on.
-        self.reflection_rounds = 2  # The number of rounds the agent can look back
-        
+        self.lookback = 5  # Number of observations available without retrieval; used for gathering keys
+        self.gamma = 0.95  # Decay factor for determining memory importance
+        self.reflection_capacity = (
+            2  # Number of reflections to perform after each round
+        )
+        self.reflection_distance = (
+            200  # Number of observations the agent can look back for reflection
+        )
+        self.reflection_rounds = 2  # Number of rounds the agent can look back
+
         # Attributes for calculating relevancy scores
-        self.importance_alpha = 1
-        self.recency_alpha = 1
-        self.relevance_alpha = 1
+        self.importance_alpha = 1  # Weight for importance in relevancy scoring
+        self.recency_alpha = 1  # Weight for recency in relevancy scoring
+        self.relevance_alpha = 1  # Weight for relevance in relevancy scoring
 
-        # Set up a client for this instance
-        self.client = set_up_openai_client(org="Penn")
+        # Set up a client for this instance of the agent
+        self.client = set_up_openai_client(
+            org="Penn"
+        )  # Initialize OpenAI client with organization identifier
 
-        # Initialize stopwords
-        self.stopwords = self._generate_stopwords()
+        # Initialize stopwords for natural language processing
+        self.stopwords = self._generate_stopwords()  # Generate and store stopwords
 
     # ----------- MEMORY CREATION -----------
-    def add_memory(self,
-                   round,
-                   tick,
-                   description,
-                   keywords,
-                   location,
-                   success_status,
-                   memory_importance,
-                   memory_type,
-                   actor_id):
-        
+    def add_memory(
+        self,
+        round,
+        tick,
+        description,
+        keywords,
+        location,
+        success_status,
+        memory_importance,
+        memory_type,
+        actor_id,
+    ):
+        """Adds a memory entry to the agent's memory system.
+
+        This method validates the memory type, generates a unique node ID, and embeds the provided description.
+        It then creates a new memory entry based on the specified memory type and caches it for future retrieval.
+
+        Args:
+            round (int): The current round in the game.
+            tick (int): The current tick or time step in the game.
+            description (str): A description of the memory to be added.
+            keywords (dict): A dictionary of keywords associated with the memory.
+            location (str): The location where the memory was created.
+            success_status (bool): Indicates whether the action associated with the memory was successful.
+            memory_importance (float): A value representing the importance of the memory.
+            memory_type (Union[int, MemoryType]): The type of memory being added, represented as an integer or
+            MemoryType enum.
+            actor_id (str): The ID of the actor associated with the memory.
+
+        Raises:
+            ValueError: If the provided memory type is not valid.
+
+        Notes:
+            The method supports different types of memories, including actions, reflections, and perceptions.
+            It also caches the memory under relevant keywords and memory types for efficient retrieval.
+        """
+
         if not self.is_valid_memory_type(memory_type):
             valid_types = [type.name for type in MemoryType]
-            raise ValueError(f"Memories must be created with valid type; one of {valid_types}")
-            
+            raise ValueError(
+                f"Memories must be created with valid type; one of {valid_types}"
+            )
+
         # Get the next node id
         # This works out to be the number of observations b/c of zero-indexing
         node_id = self.num_observations
-        
+
         # Modify the description w.r.t this character's name
-        # description = self.replace_character(description, 
-        #                                      self.agent_name.lower(), 
+        # description = self.replace_character(description,
+        #                                      self.agent_name.lower(),
         #                                      agent_descriptor=self.agent_description)
-        
+
         # Get a flattened list of keywords found in this memory
         node_kwds = [w for kw_type in keywords.values() for w in kw_type]
 
@@ -133,45 +290,49 @@ class MemoryStream:
         self_is_actor = int(actor_id == self.agent_id)
 
         if memory_type == MemoryType.ACTION.value:
-            new_memory = self.add_action(node_id,
-                                         round,
-                                         tick,
-                                         description,
-                                         location,
-                                         success_status,
-                                         memory_importance,
-                                         type=MemoryType.ACTION,
-                                         node_keywords=set(node_kwds),
-                                         node_is_self=self_is_actor)
-            
-        if memory_type == MemoryType.DIALOGUE.value:
-            pass
+            new_memory = self.add_action(
+                node_id,
+                round,
+                tick,
+                description,
+                location,
+                success_status,
+                memory_importance,
+                type=MemoryType.ACTION,
+                node_keywords=set(node_kwds),
+                node_is_self=self_is_actor,
+            )
+
         if memory_type == MemoryType.REFLECTION.value:
-            new_memory = self.add_reflection(node_id,
-                                             round,
-                                             tick,
-                                             description,
-                                             location,
-                                             success_status,
-                                             memory_importance,
-                                             type=MemoryType.REFLECTION,
-                                             node_keywords=set(node_kwds),
-                                             node_is_self=self_is_actor)
-        
+            new_memory = self.add_reflection(
+                node_id,
+                round,
+                tick,
+                description,
+                location,
+                success_status,
+                memory_importance,
+                type=MemoryType.REFLECTION,
+                node_keywords=set(node_kwds),
+                node_is_self=self_is_actor,
+            )
+
         if memory_type == MemoryType.PERCEPT.value:
-            new_memory = self.add_perception(node_id,
-                                             round,
-                                             tick,
-                                             description,
-                                             location,
-                                             success_status,
-                                             memory_importance,
-                                             type=MemoryType.PERCEPT,
-                                             node_keywords=set(node_kwds),
-                                             node_is_self=self_is_actor)
+            new_memory = self.add_perception(
+                node_id,
+                round,
+                tick,
+                description,
+                location,
+                success_status,
+                memory_importance,
+                type=MemoryType.PERCEPT,
+                node_keywords=set(node_kwds),
+                node_is_self=self_is_actor,
+            )
         # Add node to sequential memory
         self.observations.append(new_memory)
-        
+
         # NODE CACHEING
         # Cache the node under its keywords
         for category, kws_list in keywords.items():
@@ -181,313 +342,679 @@ class MemoryStream:
                 else:
                     self.keyword_nodes[category].update({word: [node_id]})
 
-        # Cache the node under the value of its MemoryType and its round ID.: 
+        # Cache the node under the value of its MemoryType and its round ID.:
         self.memory_type_nodes[memory_type].append(node_id)
         self.this_round_nodes[round].append(node_id)
-        
+
         # increment the internal count of nodes
         self.num_observations += 1
-            
-    def add_action(self,
-                   node_id,
-                   round,
-                   tick,
-                   description,
-                   location: str,
-                   success_status: bool,
-                   memory_importance: int,
-                   type: MemoryType,
-                   node_keywords: set,
-                   node_is_self: int) -> None:
-        
-        new_action = ObservationNode(node_id,
-                                     node_round=round,
-                                     node_tick=tick,
-                                     node_level=1,
-                                     node_loc=location,
-                                     node_description=description,
-                                     node_success=success_status,
-                                     embedding_key=node_id,
-                                     node_importance=memory_importance,
-                                     node_type=type,
-                                     node_keywords=node_keywords,
-                                     node_is_self=node_is_self)
-        return new_action
-    
-    def add_reflection(self,
-                       node_id,
-                       round,
-                       tick,
-                       description,
-                       location: str,
-                       success_status: bool,
-                       memory_importance: int,
-                       type: MemoryType,
-                       node_keywords: set,
-                       node_is_self: int) -> None:
-        
-        new_reflection = ObservationNode(node_id,
-                                         node_round=round,
-                                         node_tick=tick,
-                                         node_level=2,
-                                         node_loc=location,
-                                         node_description=description,
-                                         node_success=success_status,
-                                         embedding_key=node_id,
-                                         node_importance=memory_importance,
-                                         node_type=type,
-                                         node_keywords=node_keywords,
-                                         node_is_self=node_is_self)  
-        return new_reflection
-    
-    def add_perception(self,
-                       node_id,
-                       round,
-                       tick,
-                       description,
-                       location: str,
-                       success_status: bool,
-                       memory_importance: int,
-                       type: MemoryType,
-                       node_keywords: set,
-                       node_is_self: int) -> None:
 
-        new_perception = ObservationNode(node_id,
-                                         node_round=round,
-                                         node_tick=tick,
-                                         node_level=1,
-                                         node_loc=location,
-                                         node_description=description,
-                                         node_success=success_status,
-                                         embedding_key=node_id,
-                                         node_importance=memory_importance,
-                                         node_type=type,
-                                         node_keywords=node_keywords,
-                                         node_is_self=node_is_self)
-        return new_perception
+    def add_action(
+        self,
+        node_id,
+        round,
+        tick,
+        description,
+        location: str,
+        success_status: bool,
+        memory_importance: int,
+        type: MemoryType,
+        node_keywords: set,
+        node_is_self: int,
+    ) -> None:
+        """Creates a new action observation node.
+
+        This method constructs an `ObservationNode` representing an action taken by the agent,
+        encapsulating relevant details such as the round, tick, description, and success status.
+        The created node can be used for tracking actions within the agent's memory system.
+
+        Args:
+            node_id (int): The unique identifier for the observation node.
+            round (int): The current round in the game.
+            tick (int): The current tick or time step in the game.
+            description (str): A description of the action being recorded.
+            location (str): The location where the action took place.
+            success_status (bool): Indicates whether the action was successful.
+            memory_importance (int): A value representing the importance of the action memory.
+            type (MemoryType): The type of memory being created, specifically for actions.
+            node_keywords (set): A set of keywords associated with the action.
+            node_is_self (int): Indicates whether the action was performed by the agent itself (1 for true, 0 for
+            false).
+
+        Returns:
+            ObservationNode: The newly created action observation node.
+        """
+
+        return ObservationNode(  # Create and return a new ObservationNode instance
+            node_id,  # Unique identifier for the observation node
+            node_round=round,  # Current round in the game
+            node_tick=tick,  # Current tick or time step in the game
+            node_level=1,  # Level of the node, set to 1 for this action
+            node_loc=location,  # Location where the action took place
+            node_description=description,  # Description of the action
+            node_success=success_status,  # Indicates if the action was successful
+            embedding_key=node_id,  # Key for embedding, using the node ID
+            node_importance=memory_importance,  # Importance value of the action memory
+            node_type=type,  # Type of memory, specifically for actions
+            node_keywords=node_keywords,  # Set of keywords associated with the action
+            node_is_self=node_is_self,  # Indicates if the action was performed by the agent itself
+        )
+
+    def add_reflection(
+        self,
+        node_id,
+        round,
+        tick,
+        description,
+        location: str,
+        success_status: bool,
+        memory_importance: int,
+        type: MemoryType,
+        node_keywords: set,
+        node_is_self: int,
+    ) -> None:
+        """Creates a new reflection observation node.
+
+        This method constructs an `ObservationNode` representing a reflection made by the agent,
+        encapsulating relevant details such as the round, tick, description, and success status.
+        The created node can be used for tracking reflections within the agent's memory system.
+
+        Args:
+            node_id (int): The unique identifier for the observation node.
+            round (int): The current round in the game.
+            tick (int): The current tick or time step in the game.
+            description (str): A description of the reflection being recorded.
+            location (str): The location where the reflection took place.
+            success_status (bool): Indicates whether the reflection was successful.
+            memory_importance (int): A value representing the importance of the reflection memory.
+            type (MemoryType): The type of memory being created, specifically for reflections.
+            node_keywords (set): A set of keywords associated with the reflection.
+            node_is_self (int): Indicates whether the reflection was made by the agent itself (1 for true, 0 for false).
+
+        Returns:
+            ObservationNode: The newly created reflection observation node.
+        """
+
+        return ObservationNode(
+            node_id,
+            node_round=round,
+            node_tick=tick,
+            node_level=2,
+            node_loc=location,
+            node_description=description,
+            node_success=success_status,
+            embedding_key=node_id,
+            node_importance=memory_importance,
+            node_type=type,
+            node_keywords=node_keywords,
+            node_is_self=node_is_self,
+        )
+
+    def add_perception(
+        self,
+        node_id,
+        round,
+        tick,
+        description,
+        location: str,
+        success_status: bool,
+        memory_importance: int,
+        type: MemoryType,
+        node_keywords: set,
+        node_is_self: int,
+    ) -> None:
+        """Creates a new perception observation node.
+
+        This method constructs an `ObservationNode` representing a perception made by the agent,
+        encapsulating relevant details such as the round, tick, description, and success status.
+        The created node can be used for tracking perceptions within the agent's memory system.
+
+        Args:
+            node_id (int): The unique identifier for the observation node.
+            round (int): The current round in the game.
+            tick (int): The current tick or time step in the game.
+            description (str): A description of the perception being recorded.
+            location (str): The location where the perception took place.
+            success_status (bool): Indicates whether the perception was successful.
+            memory_importance (int): A value representing the importance of the perception memory.
+            type (MemoryType): The type of memory being created, specifically for perceptions.
+            node_keywords (set): A set of keywords associated with the perception.
+            node_is_self (int): Indicates whether the perception was made by the agent itself (1 for true, 0 for false).
+
+        Returns:
+            ObservationNode: The newly created perception observation node.
+        """
+
+        return ObservationNode(
+            node_id,
+            node_round=round,
+            node_tick=tick,
+            node_level=1,
+            node_loc=location,
+            node_description=description,
+            node_success=success_status,
+            embedding_key=node_id,
+            node_importance=memory_importance,
+            node_type=type,
+            node_keywords=node_keywords,
+            node_is_self=node_is_self,
+        )
 
     # ----------- GETTER METHODS -----------
     def get_observation(self, node_id):
-        """
-        Get the ith observation
+        """Retrieves an observation node by its unique identifier.
+
+        This method attempts to fetch an observation node from the agent's memory using the provided node ID.
+        If the node ID is invalid or out of range, it returns None, indicating that the observation does not exist.
 
         Args:
-            node_id (int): the index of the requested ObservationNode
+            node_id (int): The unique identifier for the observation node to retrieve.
 
         Returns:
-            ObservationNode: an ObservationNode
+            ObservationNode or None: The observation node associated with the given ID, or None if not found.
         """
+
         try:
-            node = self.observations[node_id]
-            return node
+            return self.observations[
+                node_id
+            ]  # Attempt to retrieve the observation node using the provided node ID
         except IndexError:
-            return None
-    
+            return None  # Return None if the node ID is out of range or invalid
+
     def get_observation_description(self, node_id):
-        node = self.get_observation(node_id)
-        return node.node_description
-    
+        """Retrieves the description of an observation node by its unique identifier.
+
+        This method fetches the observation node using the provided node ID and returns its description.
+        If the node does not exist, it may raise an error depending on the implementation of the `get_observation`
+        method.
+
+        Args:
+            node_id (int): The unique identifier for the observation node whose description is to be retrieved.
+
+        Returns:
+            str: The description of the observation node, or raises an error if the node does not exist.
+        """
+
+        node = self.get_observation(
+            node_id
+        )  # Retrieve the observation node using the provided node ID
+        return (
+            node.node_description
+        )  # Return the description of the retrieved observation node
+
     def get_observation_type(self, node_id):
-        node = self.get_observation(node_id)
-        if node:
-            return node.node_type
-        return None
-    
-    def get_enumerated_description_list(self, 
-                                        node_id_list, 
-                                        as_type: Literal["str", "tuple"] = True
-                                        ) -> Union[List[Tuple], List[str]]:
-        """
+        """Retrieves the type of an observation node by its unique identifier.
+
+        This method fetches the observation node using the provided node ID and returns its type.
+        If the node does not exist, it returns None, indicating that the type cannot be retrieved.
+
         Args:
-            node_id_list (_type_): _description_
-            as_tuple (bool, optional): _description_. Defaults to True.
+            node_id (int): The unique identifier for the observation node whose type is to be retrieved.
 
         Returns:
-            _type_: _description_
+            MemoryType or None: The type of the observation node, or None if the node does not exist.
         """
-        enum_nodes = list(zip(node_id_list, [self.get_observation_description(i) for i in node_id_list]))
-        if as_type == "tuple":
-            return enum_nodes
-        else:
-            return [f"{mem_id}. {mem_desc}\n" for mem_id, mem_desc in enum_nodes]
-    
+
+        return node.node_type if (node := self.get_observation(node_id)) else None  
+        # Retrieve the observation node using the provided node ID and assign it to 'node'.
+        # If the node exists, return its type; otherwise, return None if the node does not exist.
+
+
+    def get_enumerated_description_list(
+        self, node_id_list, as_type: Literal["str", "tuple"] = True
+    ) -> Union[List[Tuple], List[str]]:
+        """Generates a list of observation descriptions paired with their IDs.
+
+        This method takes a list of node IDs and retrieves their corresponding descriptions,
+        returning them either as a list of tuples or a formatted string list based on the specified type.
+        This allows for flexible output depending on the needs of the caller.
+
+        Args:
+            node_id_list (list): A list of unique identifiers for the observation nodes.
+            as_type (Literal["str", "tuple"], optional): The format of the output; either "tuple" for a list of tuples
+                or "str" for a list of formatted strings. Defaults to "tuple".
+
+        Returns:
+            Union[List[Tuple], List[str]]: A list of tuples containing node IDs and descriptions,
+                or a list of formatted strings based on the specified type.
+        """
+
+        enum_nodes = list(
+            zip(
+                node_id_list,
+                [self.get_observation_description(i) for i in node_id_list],
+            )
+        )  # Create a list of tuples by pairing each node ID with its corresponding description
+
+        if as_type == "tuple":  # Check if the requested output type is a tuple
+            return enum_nodes  # Return the list of tuples (node ID, description)
+        else:  # If the requested output type is not a tuple
+            return [f"{mem_id}. {mem_desc}\n" for mem_id, mem_desc in enum_nodes]  
+            # Return a list of formatted strings, each containing the node ID and description, followed by a newline
+            # character
+
+
     def get_observation_embedding(self, text):
-        """
-        Embed the text of an observation
+        """Generates an embedded vector representation of the given text.
+
+        This method takes a text input and retrieves its corresponding embedded vector using a text embedding function.
+        The resulting vector can be used for various applications, such as similarity comparisons or machine learning
+        tasks.
 
         Args:
-            text (str): the text to embed
+            text (str): The text to be converted into an embedded vector.
 
         Returns:
-            ndarray: an embedding vector
+            numpy.ndarray: The embedded vector representation of the input text.
         """
-        embedded_vector = get_text_embedding(text)
-        return embedded_vector
-    
+
+        return get_text_embedding(text)
+
     def get_observations_by_round(self, round):
-        return self.this_round_nodes[round]
-    
-    def get_observations_after_round(self, round, inclusive=False):
-        nodes = []
-        if inclusive:
-            requested_rounds = [r for r in self.this_round_nodes if r >= round]
-        else:
-            requested_rounds = [r for r in self.this_round_nodes if r > round]
-        for r in requested_rounds:
-            r_nodes = self.get_observations_by_round(r)
-            nodes.extend(r_nodes)
-        return nodes
-    
-    def get_observations_by_type(self, obs_type):
-        """
-        Get a list of node_ids of a specified type
+        """Retrieves all observations associated with a specific round.
+
+        This method returns a list of observation nodes that were recorded during the specified round.
+        It allows for easy access to all observations made in a particular round of the game.
 
         Args:
-            obs_type (int): a valid MemoryType value
+            round (int): The round number for which to retrieve the observations.
 
         Returns:
-            list: a list of nodes of type "obs_type"
+            list: A list of observation nodes associated with the specified round.
         """
-        if not self.is_valid_memory_type(obs_type):
-            raise ValueError(f"{obs_type} is not a supported MemoryType({list(MemoryType)}).")
-        
-        if isinstance(obs_type, MemoryType):
+
+        return self.this_round_nodes[round]
+
+    def get_observations_after_round(self, round, inclusive=False):
+        """Retrieves all observations recorded after a specified round.
+
+        This method collects and returns observation nodes from rounds that occur after the given round number.
+        The inclusion of the specified round can be controlled by the `inclusive` parameter, allowing for flexibility in
+        the retrieval.
+
+        Args:
+            round (int): The round number after which to retrieve observations.
+            inclusive (bool, optional): If True, includes observations from the specified round;
+                if False, excludes it. Defaults to False.
+
+        Returns:
+            list: A list of observation nodes recorded after the specified round.
+        """
+
+        nodes = []  # Initialize an empty list to store the observation nodes
+
+        # Determine the rounds to request based on the inclusive flag
+        if inclusive:
+            requested_rounds = [
+                r for r in self.this_round_nodes if r >= round
+            ]  # Include the specified round
+        else:
+            requested_rounds = [
+                r for r in self.this_round_nodes if r > round
+            ]  # Exclude the specified round
+
+        # Iterate through the requested rounds to gather observation nodes
+        for r in requested_rounds:
+            r_nodes = self.get_observations_by_round(
+                r
+            )  # Retrieve observation nodes for the current round
+            nodes.extend(r_nodes)  # Add the retrieved nodes to the list
+
+        return nodes  # Return the collected observation nodes
+
+    def get_observations_by_type(self, obs_type):
+        """Retrieves all observations of a specified memory type.
+
+        This method checks if the provided observation type is valid and retrieves the corresponding observation nodes
+        associated with that memory type. It raises an error if the type is unsupported, ensuring that only valid types
+        are processed.
+
+        Args:
+            obs_type (Union[int, MemoryType]): The type of memory observations to retrieve,
+                which can be specified as an integer or a MemoryType enum.
+
+        Raises:
+            ValueError: If the provided observation type is not a supported MemoryType.
+
+        Returns:
+            list: A list of observation nodes associated with the specified memory type.
+        """
+
+        if not self.is_valid_memory_type(
+            obs_type
+        ):  # Check if the provided observation type is valid
+            raise ValueError(
+                f"{obs_type} is not a supported MemoryType({list(MemoryType)})."
+            )  # Raise an error if the type is unsupported
+
+        if isinstance(
+            obs_type, MemoryType
+        ):  # Check if obs_type is an instance of the MemoryType enum
             # Convert Enum to its value
-            obs_type = obs_type.value
-            
-        return self.memory_type_nodes[obs_type]
+            obs_type = (
+                obs_type.value
+            )  # Assign the integer value of the enum to obs_type
+
+        return self.memory_type_nodes[
+            obs_type
+        ]  # Return the list of observation nodes associated with the specified memory type
 
     def get_most_recent_summary(self):
-        nodes = self.observations[-self.lookback:]
-        summary = f"The last {self.lookback} observations in chronological order you have made are:"
+        """Generates a summary of the most recent observations made by the agent.
+
+        This method retrieves the last few observations based on the lookback attribute and formats them into a summary
+        string. The summary provides a chronological list of the most recent observations, making it easy to review past
+        actions.
+
+        Returns:
+            str: A formatted summary of the last `lookback` observations made by the agent.
+        """
+
+        nodes = self.observations[
+            -self.lookback :
+        ]  # Retrieve the last 'lookback' number of observations from the agent's memory
+        summary = f"The last {self.lookback} observations in chronological order you have made are:"  # Initialize the summary string
+
+        # Iterate through the retrieved nodes to build the summary
         for i, node in enumerate(nodes):
-            summary += "\n{idx}. {desc}".format(idx=i, desc=node.node_description)
-        return summary
+            summary += "\n{idx}. {desc}".format(
+                idx=i, desc=node.node_description
+            )  # Append each observation's description to the summary
+
+        return summary  # Return the complete summary of the most recent observations
 
     def get_embedding(self, index):
-        """
-        Get the index of a given node
+        """Retrieves the embedding for a specified node index.
+
+        This method checks if a node exists at the given index and, if so, returns its corresponding embedding from
+        memory. It is useful for accessing the vector representation of a node's description for further processing or
+        analysis.
 
         Args:
-            index (int): index of the node
+            index (int): The index of the node for which to retrieve the embedding.
 
         Returns:
-            np.array: an embedding of the node description
+            np.array: The embedding of the node description if the node exists; otherwise, it may raise an error if the
+            node does not exist.
         """
-        if self.node_exists(index):
-            return self.memory_embeddings[index]
-        
+
+        if self.node_exists(index):  # Check if a node exists at the specified index
+            return self.memory_embeddings[
+                index
+            ]  # Return the embedding associated with the node at the given index
+
     def get_query_embeddings(self):
-        return np.array(list([q for q in self.query_embeddings.values() if q.all()]))
-        
+        """Retrieves the query embeddings stored in the agent's memory.
+
+        This method collects all non-empty query embeddings and returns them as a NumPy array.
+        It is useful for accessing the embeddings that represent the current state of the agent's queries.
+
+        Returns:
+            np.array: An array containing the non-empty query embeddings.
+        """
+
+        return np.array([q for q in self.query_embeddings.values() if q.all()])
+        # Create and return a NumPy array containing all non-empty query embeddings from the query_embeddings dictionary
+        # The condition q.all() ensures that only embeddings with all elements non-zero are included
+
     def get_relationships_summary(self):
+        """Generates a summary of the agent's relationships.
+
+        This method is intended to provide an overview of the relationships associated with the agent.
+        However, it is not yet implemented and will raise a NotImplementedError if called.
+
+        Raises:
+            NotImplementedError: Indicates that the method has not been implemented yet.
+        """
+
         raise NotImplementedError
-    
+
     # ----------- SETTER METHODS -----------
     def set_embedding(self, node_id, new_embedding):
-        """
-        Update the embedding for an existing node
+        """Sets a new embedding for a specified node ID.
+
+        This method updates the embedding of a node if it exists in the memory.
+        It returns a boolean indicating whether the update was successful, allowing for easy error handling.
 
         Args:
-            node_id (int): id of a memory
-            new_embedding (np.ndarray): an embedding from OpenAI embeddings API
-        """
-        if not self.node_exists(node_id):
-            return False
-        else:
-            self.memory_embeddings.update({node_id: new_embedding})
-            return True
-        
-    def set_query_embeddings(self, character, round: int = 0):
-        """
-        Default "queries" for determining relevance when no explicit query has been passed to retrieve()
-
-        Args:
-            character (Character): agent of this memory
-            round (int, optional): the round in the game. Defaults to 0.
+            node_id (int): The unique identifier of the node for which to set the new embedding.
+            new_embedding (np.array): The new embedding to be assigned to the specified node.
 
         Returns:
-            _type_: _description_
+            bool: True if the embedding was successfully updated; False if the node does not exist.
         """
-        cached_queries = {}
+
+        if not self.node_exists(
+            node_id
+        ):  # Check if the node with the specified ID exists
+            return False  # Return False if the node does not exist, indicating the update was unsuccessful
+
+        self.memory_embeddings.update(
+            {node_id: new_embedding}
+        )  # Update the memory_embeddings dictionary with the new embedding for the node
+        return (
+            True  # Return True to indicate that the embedding was successfully updated
+        )
+
+    def set_query_embeddings(self, character, round: int = 0):
+        """Sets the default query embeddings for the character based on their persona and goals.
+
+        This method retrieves the embeddings for the character's persona summary and current goals,
+        caching them in a dictionary for later use. It handles cases where the character may not have goals defined,
+        ensuring that the function can operate smoothly without raising errors.
+
+        Args:
+            character (Character): The agent whose embeddings are being set.
+            round (int, optional): The round in the game for which to retrieve the goal embedding. Defaults to 0.
+
+        Returns:
+            dict: A dictionary containing the cached query embeddings for the persona and goals.
+        """
+
+        cached_queries = (
+            {}
+        )  # Initialize an empty dictionary to store cached query embeddings
+
         try:
-            current_goal_embed = character.goals.get_goal_embedding(round=round)
+            current_goal_embed = character.goals.get_goal_embedding(
+                round=round
+            )  # Attempt to retrieve the goal embedding for the specified round
         except AttributeError:
-            current_goal_embed = None
-        persona_embed = get_text_embedding(character.persona.summary)
-        if persona_embed is not None:
-            cached_queries["persona"] = persona_embed
-        if current_goal_embed is not None:
-            cached_queries["goals"] = current_goal_embed
-        return cached_queries
-    
+            current_goal_embed = (
+                None  # If the character has no goals, set current_goal_embed to None
+            )
+
+        persona_embed = get_text_embedding(
+            character.persona.summary
+        )  # Get the embedding for the character's persona summary
+        if (
+            persona_embed is not None
+        ):  # Check if the persona embedding was successfully retrieved
+            cached_queries["persona"] = (
+                persona_embed  # Store the persona embedding in the cached_queries dictionary
+            )
+
+        if (
+            current_goal_embed is not None
+        ):  # Check if the goal embedding was successfully retrieved
+            cached_queries["goals"] = (
+                current_goal_embed  # Store the goal embedding in the cached_queries dictionary
+            )
+
+        return cached_queries  # Return the dictionary containing the cached query embeddings
+
     def set_goal_query(self, goal_embedding):
+        """Updates the query embeddings with the provided goal embedding.
+
+        This method attempts to set the goal query embedding in the agent's query embeddings dictionary.
+        If the update fails due to a KeyError, it catches the exception and prints an error message, allowing the
+        program to continue running.
+
+        Args:
+            goal_embedding (np.array): The embedding to be set for the goal query.
+
+        Returns:
+            None
+        """
+
         try:
-            self.query_embeddings.update({"goals": goal_embedding})
-        except KeyError as e:
-            print("Goal query embedding update failed. Skipping. Caught:\n", e)
-    
+            self.query_embeddings.update(
+                {"goals": goal_embedding}
+            )  # Attempt to update the query_embeddings dictionary with the new goal embedding
+        except (
+            KeyError
+        ) as e:  # Catch a KeyError if the update fails due to a missing key
+            print(
+                "Goal query embedding update failed. Skipping. Caught:\n", e
+            )  # Print an error message indicating the failure and the exception details
+
     # ----------- UPDATE METHODS -----------
     def update_node(self, node_id, **kwargs) -> bool:
-        try:
-            node = self.get_observation(node_id)
-        except IndexError:
-            return False
-        else:
-            for k, v in kwargs.items():
-                if hasattr(node, k):
-                    setattr(node, k, v)
-            return True
-        
-    def update_node_embedding(self, node_id, new_description) -> bool:
-        """
-        Update the embedding of a node
+        """Updates the attributes of a specified node with new values.
+
+        This method retrieves a node by its ID and updates its attributes based on the provided keyword arguments.
+        If the node does not exist, it returns False; otherwise, it applies the updates and returns True.
 
         Args:
-            node_id (int): node id to switch
-            new_description (str): the updated string description
+            node_id (int): The unique identifier of the node to be updated.
+            **kwargs: Arbitrary keyword arguments representing the attributes to update and their new values.
 
         Returns:
-            bool: success status
+            bool: True if the node was successfully updated; False if the node does not exist.
         """
-        if not self.node_exists(node_id):
-            return False
+
+        try:
+            node = self.get_observation(
+                node_id
+            )  # Attempt to retrieve the observation node using the provided node ID
+        except (
+            IndexError
+        ):  # Catch an IndexError if the node ID is invalid or does not exist
+            return False  # Return False to indicate that the update failed due to a non-existent node
         else:
-            updated_embedding = self.get_observation_embedding(new_description)
-            success = self.set_embedding(node_id, updated_embedding)
-            return success
-    
+            for (
+                k,
+                v,
+            ) in (
+                kwargs.items()
+            ):  # Iterate over the keyword arguments provided for updating the node
+                if hasattr(
+                    node, k
+                ):  # Check if the node has the attribute specified by the keyword argument
+                    setattr(
+                        node, k, v
+                    )  # Update the attribute of the node with the new value
+            return (
+                True  # Return True to indicate that the node was successfully updated
+            )
+
+    def update_node_embedding(self, node_id, new_description) -> bool:
+        """Updates the embedding of a specified node with a new description.
+
+        This method checks if the node exists and, if so, retrieves the new embedding based on the provided description.
+        It then updates the node's embedding and returns a boolean indicating whether the update was successful.
+
+        Args:
+            node_id (int): The unique identifier of the node whose embedding is to be updated.
+            new_description (str): The new description used to generate the updated embedding.
+
+        Returns:
+            bool: True if the embedding was successfully updated; False if the node does not exist.
+        """
+
+        if not self.node_exists(
+            node_id
+        ):  # Check if the node with the specified ID exists
+            return False  # Return False if the node does not exist, indicating the update cannot proceed
+
+        updated_embedding = self.get_observation_embedding(
+            new_description
+        )  # Retrieve the updated embedding based on the new description
+
+        return self.set_embedding(
+            node_id, updated_embedding
+        )  # Update the node's embedding and return the result of the update operation
+
     # ----------- MISC HELPER/VALIDATION METHODS -----------
     def replace_character(self, text, character_name, agent_descriptor):
-        # Escape any special regex characters in the descriptor and character_name
-        escaped_name = re.escape(character_name)
-        escaped_descriptor = re.escape(" ".join([w for w in agent_descriptor.split() if w not in self.stopwords]))
-        # Pattern to match 'the' optionally, then the descriptor optionally, followed by the character name
-        # The descriptor and the character name can occur together or separately
-        pattern = r'\b(?:the\s+)?(?:(?:{d}\s+)?{c}|{d})\b'.format(d=escaped_descriptor, c=escaped_name)
-        replacement = 'you'
-        return re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-    
-    def node_exists(self, node_id):
-        return node_id < self.num_observations
-    
-    def is_valid_memory_type(self, memory_type):
-        """
-        Confirm that a memory type is valid.
-        Allows for either the value or the name to be used as input
+        """Replaces occurrences of a character's name and descriptor in the given text with 'you'.
+
+        This method uses regular expressions to identify and replace mentions of a specified character's name
+        and their descriptor in the provided text, allowing for a more personalized narrative.
+        It handles variations in how the character may be referenced, including optional articles and descriptors.
 
         Args:
-            memory_type (MemoryType): the value to check
+            text (str): The text in which to replace the character's name and descriptor.
+            character_name (str): The name of the character to be replaced.
+            agent_descriptor (str): A descriptor associated with the character, which may also be replaced.
 
         Returns:
-            bool: if test passed
+            str: The modified text with the character's name and descriptor replaced by 'you'.
         """
-        if isinstance(memory_type, MemoryType):
-            return True
+
+        # Escape any special regex characters in the descriptor and character_name
+        escaped_name = re.escape(
+            character_name
+        )  # Escape the character name to safely use it in a regex pattern
+        escaped_descriptor = re.escape(
+            " ".join([w for w in agent_descriptor.split() if w not in self.stopwords])
+        )
+        # Escape the descriptor, excluding any stopwords, to safely use it in a regex pattern
+
+        # Pattern to match 'the' optionally, then the descriptor optionally, followed by the character name
+        # The descriptor and the character name can occur together or separately
+        pattern = r"\b(?:the\s+)?(?:(?:{d}\s+)?{c}|{d})\b".format(
+            d=escaped_descriptor, c=escaped_name
+        )
+        # Construct the regex pattern to match the character's descriptor and name, allowing for optional articles
+
+        replacement = "you"  # Define the replacement string
+
+        # Replace occurrences of the pattern in the text with 'you', ignoring case
+        return re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+    def node_exists(self, node_id):
+        """Checks if a node exists based on its unique identifier.
+
+        This method determines whether a node with the specified ID exists by comparing it to the total number of
+        observations. It returns a boolean value indicating the existence of the node.
+
+        Args:
+            node_id (int): The unique identifier of the node to check.
+
+        Returns:
+            bool: True if the node exists; False otherwise.
+        """
+
+        # Return True if the node ID is less than the total number of observations, indicating the node exists
+        return node_id < self.num_observations
+
+    def is_valid_memory_type(self, memory_type):
+        """Checks if the provided memory type is valid.
+
+        This method verifies whether the given memory type is an instance of the MemoryType enum or can be converted to
+        it. It returns True if the memory type is valid and False otherwise, ensuring that only supported types are
+        processed.
+
+        Args:
+            memory_type (Union[int, MemoryType]): The memory type to validate, which can be an integer or a MemoryType
+            enum.
+
+        Returns:
+            bool: True if the memory type is valid; False otherwise.
+        """
+
+        if isinstance(
+            memory_type, MemoryType
+        ):  # Check if the provided memory_type is already an instance of MemoryType
+            return True  # Return True if it is a valid MemoryType
+
         try:
             # Attempt to convert the input value to a MemoryType
-            _ = MemoryType(memory_type) 
+            _ = MemoryType(
+                memory_type
+            )  # This will succeed if memory_type is a valid integer representation of a MemoryType
         except ValueError:
-            return False
+            return False  # Return False if the conversion fails, indicating an invalid memory type
         else:
-            return True
+            return True  # Return True if the conversion is successful, confirming the memory type is valid

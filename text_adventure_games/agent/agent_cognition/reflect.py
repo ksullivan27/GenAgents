@@ -1,5 +1,5 @@
 """
-Author: 
+Authors: Kyle Sullivan and Sam Thudium
 
 File: agent_cognition/reflect.py
 Description: defines how agents reflect upon their past experiences

@@ -15,6 +15,25 @@ GROUP_MAPPING = {"A": (False, False),
 
 
 class ExperimentGame(games.SurvivorGame):
+    """
+    Represents an experimental version of the Survivor game, extending the functionality of the base SurvivorGame class.
+    This class initializes the game with specific parameters for conducting experiments, including the starting
+    location, player character, and various game settings.
+
+    Args:
+        start_at (things.Location): The starting location of the player in the game.
+        player (things.Character): The player character controlled by the user.
+        characters (list, optional): A list of additional characters (NPCs) to include in the game.
+        custom_actions (list, optional): A list of custom actions to be added to the game's parser.
+        max_ticks (int, optional): The maximum number of ticks per round, defaulting to 5.
+        num_finalists (int, optional): The number of finalists in the game, defaulting to 2.
+        experiment_name (str, optional): The name of the experiment, defaulting to "exp1".
+        experiment_id (int, optional): The ID of the experiment, defaulting to 1.
+
+    Returns:
+        None
+    """
+
     def __init__(
             self,
             start_at: things.Location,
@@ -26,6 +45,25 @@ class ExperimentGame(games.SurvivorGame):
             experiment_name="exp1",
             experiment_id=1
     ):
+        """
+        Initializes an instance of the ExperimentGame class, which is a specialized version of the SurvivorGame. This
+        constructor sets up the game with specific parameters for conducting experiments, including the starting
+        location, player character, and various game settings.
+
+        Args:
+            start_at (things.Location): The starting location of the player in the game.
+            player (things.Character): The player character controlled by the user.
+            characters (list, optional): A list of additional characters (NPCs) to include in the game.
+            custom_actions (list, optional): A list of custom actions to be added to the game's parser.
+            max_ticks (int, optional): The maximum number of ticks per round, defaulting to 5.
+            num_finalists (int, optional): The number of finalists in the game, defaulting to 2.
+            experiment_name (str, optional): The name of the experiment, defaulting to "exp1".
+            experiment_id (int, optional): The ID of the experiment, defaulting to 1.
+
+        Returns:
+            None
+        """
+
         super().__init__(start_at,
                          player, 
                          characters, 
@@ -36,6 +74,21 @@ class ExperimentGame(games.SurvivorGame):
                          experiment_id=experiment_id)
             
 def build_experiment(experiment_name, experiment_id, max_ticks=6, num_finalists=2, architecture="A") -> games.Game:
+    """
+    Builds and initializes an experimental game environment with specified parameters. This function sets up locations,
+    items, and characters, and returns an instance of the ExperimentGame configured for the given experiment.
+
+    Args:
+        experiment_name (str): The name of the experiment.
+        experiment_id (int): The ID of the experiment.
+        max_ticks (int, optional): The maximum number of ticks per round, defaulting to 6.
+        num_finalists (int, optional): The number of finalists in the game, defaulting to 2.
+        architecture (str, optional): The architecture type for the characters, defaulting to "A".
+
+    Returns:
+        games.Game: An instance of the ExperimentGame configured with the specified parameters.
+    """
+
     # Locations
     camp = things.Location(
         "Camp",
