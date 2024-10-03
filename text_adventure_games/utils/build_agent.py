@@ -107,7 +107,6 @@ def get_or_create_base_facts(description: str, make_new=False, model=DEFAULT_MOD
 
     # If a new character is not requested, proceed to compare the description to existing characters.
     else:
-
         try:
             # Attempt to retrieve the existing character facts from storage.
             characters = get_character_facts()
@@ -303,11 +302,8 @@ def build_agent(
         for k in missing_keys:
             facts[k] = get_backup_fact(k)
 
-    # Create a persona for the agent using the validated facts, trait scores, and optional archetype.
-    p = create_persona(facts, trait_scores, archetype=archetype, model=model)
-
-    # Return the created persona representing the agent.
-    return p
+    # Create and return a persona for the agent using the validated facts, trait scores, and optional archetype.
+    return create_persona(facts, trait_scores, archetype=archetype, model=model)
 
     # TODO: How to add affinities? We need the game information to know how many
     # characters exist in the world. This may need to happen later
@@ -463,15 +459,12 @@ def get_archetype_profiles(target: str) -> Dict:
         # Load the contents of the JSON file into a Python dictionary.
         profiles = json.load(f)
 
-    # Iterate through each archetype in the loaded profiles.
-    for atype in profiles["archetypes"]:
-        # Check if the name of the current archetype matches the target name.
-        if target == atype["name"]:
-            # If a match is found, return the corresponding archetype profile.
-            return atype
-
-    # If no matching archetype is found, return None.
-    return None
+    # Return the first archetype from the profiles that matches the target name.
+    # If no match is found, return None.
+    return next(
+        (atype for atype in profiles["archetypes"] if target == atype["name"]),
+        None,
+    )
 
 
 def get_character_facts():

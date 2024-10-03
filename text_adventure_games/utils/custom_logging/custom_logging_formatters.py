@@ -148,7 +148,7 @@ class CustomJSONFormatter(logging.Formatter):
         # Update the message dictionary with any remaining fields from always_fields. These are the fields that are not
         # in fmt_keys but still need to be included, like the message or timestamp if they weren’t popped earlier (if
         # they weren't in fmt_keys – they weren't being renamed).
-        message.update(always_fields)
+        message |= always_fields
 
         # Iterate over all attributes in the record's __dict__ to add any additional fields not already included.
         for key, val in record.__dict__.items():

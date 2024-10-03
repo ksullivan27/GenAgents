@@ -5,13 +5,25 @@ File: agent_cognition/goals.py
 Description: defines how agents reflect upon their past experiences
 """
 
+# Import future annotations for forward reference type hints.
 from __future__ import annotations
+
+# Import TYPE_CHECKING to allow for type hints without circular imports.
 from typing import TYPE_CHECKING
+
+# Import defaultdict from collections for creating default dictionaries.
 from collections import defaultdict
 
+# Import numpy for numerical operations.
 import numpy as np
+
+# Import utility functions for logging and text embedding from the general module.
 from text_adventure_games.utils.general import get_logger_extras, get_text_embedding
+
+# Import the goal prompt from the prompts module.
 from text_adventure_games.assets.prompts import goal_prompt as gp
+
+# Import helper functions for GPT calls and context management from the gpt_helpers module.
 from text_adventure_games.gpt.gpt_helpers import (
     GptCallHandler,
     limit_context_length,
@@ -20,10 +32,12 @@ from text_adventure_games.gpt.gpt_helpers import (
     context_list_to_string,
 )
 
+# Conditional import for type checking to avoid circular dependencies.
 if TYPE_CHECKING:
     from text_adventure_games.things.characters import Character
     from text_adventure_games.games import Game
 
+# Define a constant for the maximum output length for goals.
 GOALS_MAX_OUTPUT = 256
 
 # 1. Get character's goals
@@ -36,47 +50,147 @@ GOALS_MAX_OUTPUT = 256
 
 
 class Goals:
+    """
+    Manages the goals for a character within the game, allowing for the creation, updating, and evaluation of goals
+    based on the character's actions and reflections. This class utilizes a GPT handler to generate goals and maintains
+    a structured format for storing and retrieving goals by priority and round.
+
+    Args:
+        character (Character): The character for whom the goals are being managed.
+
+    Attributes:
+        character (Character): The character associated with this goals manager.
+        goals (defaultdict): A dictionary storing goals categorized by round and priority.
+        goal_scores (defaultdict): A dictionary storing goal completion scores categorized by round and priority.
+        recent_reflection: Stores the most recent reflection made by the character.
+        goal_embeddings (defaultdict): A dictionary storing embeddings for each goal by round.
+        gpt_handler (GptCallHandler): The handler for making calls to the GPT model.
+        token_offset (int): The offset for managing token limits in GPT calls.
+        offset_pad (int): Additional padding for token management.
+
+    Methods:
+        _set_up_gpt():
+            Configures and initializes the GPT handler with the specified model parameters.
+
+        _log_goals(game, message):
+            Logs the specified message related to goals in the game's logger.
+
+        gpt_generate_goals(game):
+            Calls GPT to create a new goal for the character based on the current game state.
+
+        build_goal_prompts(game):
+            Constructs the system and user prompts necessary for goal generation.
+
+        build_system_prompt(game):
+            Constructs the system prompt used for generating goals in the game.
+
+        build_user_prompt(game, consumed_tokens=0):
+            Constructs the user prompt for goal generation, incorporating relevant context and previous goals.
+
+        goal_update(goal, goal_embedding, game):
+            Updates the goals for the current round based on the provided goal string and its embedding.
+
+        get_goals(round=-1, priority="all", as_str=False):
+            Retrieves goals based on the specified round and priority.
+
+        stringify_goal(goal):
+            Converts a goal or a collection of goals into a string representation.
+
+        _create_goal_embedding(goal):
+            Generates an embedding for a specified goal.
+
+        get_goal_embedding(round):
+            Retrieves the goal embedding for a specified round.
+
+        update_goals_in_memory(round):
+            Updates the character's memory with the current goal embedding for a specified round.
+
+        evaluate_goals(game):
+            Evaluates the goals of the agent within the context of the game.
+
+        build_eval_user_prompt(game, consumed_tokens=0):
+            Constructs a user prompt for evaluating progress towards a goal based on reflections and actions.
+
+        score_update(score, game):
+            Maintains the dictionary of goal completion scores for the character by round.
+
+        get_goal_scores(round=-1, priority="all", as_str=False):
+            Retrieves goal completion scores based on the specified round and priority.
+    """
 
     def __init__(self, character: "Character"):
         """
+        Initializes the Goals manager for a character, setting up the necessary data structures to track goals, scores,
+        and embeddings. This constructor also configures the GPT handler for generating goals and initializes parameters
+        for managing token limits.
+
         The goal is stored in the form of a dictionary based on the priority with the round number as the key in the
         following format:
             {Round #:
                 {"Low Priority": _description_,
                  "Medium Priority: _description_,
                  "High Priority": _description_}
+
+        Args:
+            character (Character): The character for whom the goals are being managed.
+
+        Attributes:
+            character (Character): The character associated with this goals manager.
+            goals (defaultdict): A dictionary storing goals categorized by round and priority.
+            goal_scores (defaultdict): A dictionary storing goal completion scores categorized by round and priority.
+            recent_reflection: Stores the most recent reflection made by the character.
+            goal_embeddings (defaultdict): A dictionary storing embeddings for each goal by round.
+            gpt_handler (GptCallHandler): The handler for making calls to the GPT model.
+            token_offset (int): The offset for managing token limits in GPT calls.
+            offset_pad (int): Additional padding for token management.
         """
+
+        # Assign the character associated with this goals manager to an instance variable.
         self.character = character
+
+        # Initialize a defaultdict to store goals categorized by round and priority.
         self.goals = defaultdict(dict)
+
+        # Initialize a defaultdict to store goal completion scores categorized by round and priority.
         self.goal_scores = defaultdict(dict)
+
+        # Initialize a variable to store the most recent reflection made by the character.
         self.recent_reflection = None
+
+        # Initialize a defaultdict to store embeddings for each goal by round.
         self.goal_embeddings = defaultdict(np.ndarray)
 
-        # GPT Call handler attrs
+        # Set up the GPT call handler for generating goals and managing interactions with the GPT model.
         self.gpt_handler = self._set_up_gpt()
+
+        # Set the token offset to account for a few variable tokens in the user prompt.
         self.token_offset = (
             50  # Taking into account a few variable tokens in the user prompt
         )
+
+        # Initialize an offset padding value for managing token limits.
         self.offset_pad = 5
 
     def _set_up_gpt(self):
         """
-        Configures and initializes the GPT handler with the specified model parameters.
-        This method sets up the necessary configurations for the GPT model to be used in generating responses.
+        Configures and initializes the GPT handler with the specified model parameters. This method sets up the
+        necessary configurations for the GPT model to be used in generating responses related to goals.
 
         Returns:
             GptCallHandler: An instance of the GptCallHandler configured with the specified parameters.
         """
 
+        # Define the parameters for configuring the GPT model.
         model_params = {
-            "api_key_org": "Helicone",
-            "model": "gpt-4",
-            "max_tokens": GOALS_MAX_OUTPUT,
-            "temperature": 1,
-            "top_p": 1,
-            "max_retries": 5,
+            "api_key_org": "Helicone",  # Organization API key for accessing the GPT model.
+            "model": "gpt-4",  # Specify the model version to be used.
+            "max_tokens": GOALS_MAX_OUTPUT,  # Maximum number of tokens to generate in the response.
+            "temperature": 1,  # Controls the randomness of the output; higher values result in more random outputs.
+            "top_p": 1,  # Nucleus sampling parameter; controls diversity by limiting the cumulative probability of token selection.
+            "max_retries": 5,  # Maximum number of retries for generating a response in case of errors.
         }
 
+        # Return an instance of GptCallHandler initialized with the specified model parameters.
         return GptCallHandler(**model_params)
 
     def _log_goals(self, game, message):
@@ -546,7 +660,6 @@ class Goals:
             str: A formatted string containing the user prompt with the goal, reflections, and actions.
         """
 
-
         # Retrieve the current goal for the ongoing round and format it for the prompt
         goal = self.get_goals(round=game.round, as_str=True)
         goal_prompt = f"Goal:{goal}\n\n"
@@ -604,13 +717,12 @@ class Goals:
             tokenizer=game.parser.tokenizer,
         )
 
-
     def score_update(self, score: str, game: "Game"):
         # sourcery skip: avoid-builtin-shadow
         """
         Maintains the dictionary of goal completion scores for the character by round
         """
-        
+
         # Get the current round from the game
         round = game.round
 
@@ -628,7 +740,7 @@ class Goals:
                 except ValueError:
                     # Handle the case where conversion to integer fails
                     print("Error: Unable to convert 'Low Priority' to an integer.")
-            
+
             # Check for 'Medium Priority' in the line and attempt to convert the score to an integer
             elif "Medium Priority" in line:
                 try:
@@ -638,7 +750,7 @@ class Goals:
                 except ValueError:
                     # Handle the case where conversion to integer fails
                     print("Error: Unable to convert 'Medium Priority' to an integer.")
-            
+
             # Check for 'High Priority' in the line and attempt to convert the score to an integer
             elif "High Priority" in line:
                 try:
@@ -648,7 +760,6 @@ class Goals:
                 except ValueError:
                     # Handle the case where conversion to integer fails
                     print("Error: Unable to convert 'High Priority' to an integer.")
-
 
     def get_goal_scores(self, round=-1, priority="all", as_str=False):
         """
@@ -660,7 +771,7 @@ class Goals:
             Returns:
                 The goal score
         """
-        
+
         # Check if the current round is valid and a specific priority is requested
         if round != -1 and priority != "all":
             # Retrieve the score for the specified priority in the current round
@@ -674,4 +785,3 @@ class Goals:
 
         # Return the score as a string if as_str is True, otherwise return the score as is
         return self.stringify_goal(score) if as_str else score
-

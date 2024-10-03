@@ -60,12 +60,12 @@ def set_up_openai_client(org="Penn", **kwargs):
     params = kwargs.copy()
 
     # Update the parameters with the retrieved API key.
-    params.update({"api_key": key})
+    params["api_key"] = key
 
     # If the organization is "Helicone", retrieve and set the base URL for the API.
     if org == "Helicone":
         base_url = consts.get_helicone_base_path()
-        params.update({"base_url": base_url})
+        params["base_url"] = base_url
 
     # Initialize and return the OpenAI client with the specified parameters.
     return OpenAI(**params)
@@ -596,6 +596,6 @@ def create_dirs(fp):
 
     # Create all necessary directories for the specified file path 'fp'.
     # The os.path.dirname(fp) function retrieves the directory name from the file path.
-    # The exist_ok=True parameter allows the function to succeed without raising an error 
+    # The exist_ok=True parameter allows the function to succeed without raising an error
     # if the target directory already exists.
     os.makedirs(os.path.dirname(fp), exist_ok=True)

@@ -31,6 +31,9 @@ from spacy import load as spacyload  # Importing spaCy for natural language proc
 # Importing utility functions for OpenAI client setup and text embedding
 from ..utils.general import set_up_openai_client, get_text_embedding
 
+# Importing GptCallHandler to interface with OpenAI client
+from ..gpt.gpt_helpers import GptCallHandler
+
 if TYPE_CHECKING:
     from ..things.characters import (
         Character,
@@ -38,9 +41,10 @@ if TYPE_CHECKING:
 
 
 class MemoryType(Enum):
-    """Enumeration for different types of memory.
+    """
+    Enumeration for different types of memory.
 
-    This class defines various memory types that can be used in the context of an agent's memory system. 
+    This class defines various memory types that can be used in the context of an agent's memory system.
     Each memory type represents a distinct category of information that the agent can store and recall.
 
     Attributes:
@@ -58,18 +62,19 @@ class MemoryType(Enum):
 
 @dataclass
 class ObservationNode:
-    """Represents an observation made by an agent during a specific round and tick.
+    """
+    Represents an observation made by an agent during a specific round and tick.
 
-    This class encapsulates all relevant information about an observation, including its unique identifier, 
-    the round and tick at which it occurred, the level of the observation, and additional metadata such as location, 
-    description, success status, and importance. It is designed to facilitate the storage and retrieval of observations 
+    This class encapsulates all relevant information about an observation, including its unique identifier,
+    the round and tick at which it occurred, the level of the observation, and additional metadata such as location,
+    description, success status, and importance. It is designed to facilitate the storage and retrieval of observations
     within the agent's memory system.
 
     Attributes:
         node_id (int): Unique identifier for the observation, representing its index in the agent's memory.
         node_round (int): The round in which the observation occurred.
         node_tick (int): The tick within the round when the observation was made.
-        node_level (int): The level of the observation (1 for novel, 2 for reflections, etc.).
+        node_level (int): The level of the observation (1 for novel, 2 for reflections, 3 for ????).
         node_loc (str): The location where the observation took place.
         node_description (str): A description of the observation.
         node_success (bool): Indicates whether the observation was successful.
@@ -99,17 +104,15 @@ class ObservationNode:
     # associated_nodes: Optional[list[int]] = field(default_factory=list)
 
 
-class MemoryType(Enum):
-    """Enumeration for different types of memory.
+class MemoryStream(Enum):
+    """
+    Represents the memory stream for an agent, managing observations and memory types.
 
-    This class defines various memory types that can be used in the context of an agent's memory system.
-    Each memory type represents a distinct category of information that the agent can store and recall.
+    This class provides functionality for storing and retrieving memories associated with an agent, including
+    stopwords for natural language processing and methods for managing various types of memories.
 
     Attributes:
-        ACTION: Represents an action memory type.
-        DIALOGUE: Represents a dialogue memory type.
-        REFLECTION: Represents a reflection memory type.
-        PERCEPT: Represents a perception memory type.
+        _stopwords (set): A set of stopwords for natural language processing.
     """
 
     # store stopwords as a class variable for efficient access when adding new memories
@@ -117,7 +120,8 @@ class MemoryType(Enum):
 
     @classmethod
     def _generate_stopwords(cls):
-        """Generates and retrieves a set of stopwords for natural language processing.
+        """
+        Generates and retrieves a set of stopwords for natural language processing.
 
         This class method initializes the stopwords from the spaCy library if they have not been generated yet.
         It returns the set of stopwords, which can be used to filter out common words in text processing.
@@ -126,17 +130,20 @@ class MemoryType(Enum):
             set: A set of stopwords used in natural language processing.
         """
 
-        if cls._stopwords is None:  # Check if the stopwords have not been initialized
+        # Check if the stopwords have not been initialized
+        if cls._stopwords is None:
+            # Load the spaCy English model with specific components disabled
             nlp = spacyload(
                 "en_core_web_sm", disable=["ner", "tagger", "parser", "textcat"]
-            )  # Load the spaCy English model with specific components disabled
-            cls._stopwords = (
-                nlp.Defaults.stop_words
-            )  # Assign the default stopwords from the spaCy model to the class variable
-        return cls._stopwords  # Return the set of stopwords
+            )
+            # Assign the default stopwords from the spaCy model to the class variable
+            cls._stopwords = nlp.Defaults.stop_words
+            # Return the set of stopwords
+        return cls._stopwords
 
     def __init__(self, character: "Character"):
-        """Initializes an agent with identifying information and memory features.
+        """
+        Initializes an agent with identifying information and memory features.
 
         This constructor sets up the agent's identity based on the provided character and initializes various attributes
         related to memory management, observations, and relevancy scoring. It also establishes a connection to an OpenAI
@@ -169,31 +176,25 @@ class MemoryType(Enum):
         """
 
         # Keep track of this agent's identifying information
-        self.agent_id = (
-            character.id
-        )  # Store the character's ID for potential game reloads
-        self.agent_name = character.name  # Store the character's name
-        self.agent_description = (
-            character.description
-        )  # Store the character's description
+        # Store the character's ID for potential game reloads
+        self.agent_id = character.id
+        # Store the character's name
+        self.agent_name = character.name
+        # Store the character's description
+        self.agent_description = character.description
+        # Initialize the count of observations made by the agent
+        self.num_observations = 0
+        # List to hold the agent's observations
+        self.observations = []
 
-        self.num_observations = (
-            0  # Initialize the count of observations made by the agent
-        )
-        self.observations = []  # List to hold the agent's observations
-
-        self.memory_embeddings = (
-            {}
-        )  # Dictionary to store embeddings of observations, indexed by observation index
-        self.keyword_nodes = defaultdict(
-            lambda: defaultdict(list)
-        )  # Nested dictionary for categorizing keywords
-        self.memory_type_nodes = defaultdict(
-            list
-        )  # Dictionary to categorize memory types using MemoryType enum values
-        self.this_round_nodes = defaultdict(
-            list
-        )  # Dictionary to store observations by the current round number
+        # Dictionary to store embeddings of observations, indexed by observation index
+        self.memory_embeddings = {}
+        # Nested dictionary for categorizing keywords
+        self.keyword_nodes = defaultdict(lambda: defaultdict(list))
+        # Dictionary to categorize memory types using MemoryType enum values
+        self.memory_type_nodes = defaultdict(list)
+        # Dictionary to store observations by the current round number
+        self.this_round_nodes = defaultdict(list)
 
         # Cache for current querying statements about this agent
         # Cached embeddings include: persona summary, goals, and personal relationships
@@ -203,15 +204,16 @@ class MemoryType(Enum):
         )  # Initialize query embeddings based on the character
 
         # Attributes defining the memory features of the agent
-        self.lookback = 5  # Number of observations available without retrieval; used for gathering keys
-        self.gamma = 0.95  # Decay factor for determining memory importance
-        self.reflection_capacity = (
-            2  # Number of reflections to perform after each round
-        )
-        self.reflection_distance = (
-            200  # Number of observations the agent can look back for reflection
-        )
-        self.reflection_rounds = 2  # Number of rounds the agent can look back
+        # Number of observations available without retrieval; used for gathering keys
+        self.lookback = 5
+        # Decay factor for determining memory importance
+        self.gamma = 0.95
+        # Number of reflections to perform after each round
+        self.reflection_capacity = 2
+        # Number of observations the agent can look back for reflection
+        self.reflection_distance = 200
+        # Number of rounds the agent can look back
+        self.reflection_rounds = 2
 
         # Attributes for calculating relevancy scores
         self.importance_alpha = 1  # Weight for importance in relevancy scoring
@@ -222,6 +224,10 @@ class MemoryType(Enum):
         self.client = set_up_openai_client(
             org="Penn"
         )  # Initialize OpenAI client with organization identifier
+
+        # # TODO: Shouldn't we use the gpt_helpers.py module to create the client instead of the ab?
+        # # Initialize OpenAI client with organization identifier
+        # self.client = GptCallHandler(org="Penn")
 
         # Initialize stopwords for natural language processing
         self.stopwords = self._generate_stopwords()  # Generate and store stopwords
@@ -239,7 +245,8 @@ class MemoryType(Enum):
         memory_type,
         actor_id,
     ):
-        """Adds a memory entry to the agent's memory system.
+        """
+        Adds a memory entry to the agent's memory system.
 
         This method validates the memory type, generates a unique node ID, and embeds the provided description.
         It then creates a new memory entry based on the specified memory type and caches it for future retrieval.
@@ -330,10 +337,11 @@ class MemoryType(Enum):
                 node_keywords=set(node_kwds),
                 node_is_self=self_is_actor,
             )
+
         # Add node to sequential memory
         self.observations.append(new_memory)
 
-        # NODE CACHEING
+        # NODE CACHING
         # Cache the node under its keywords
         for category, kws_list in keywords.items():
             for word in kws_list:
@@ -362,7 +370,8 @@ class MemoryType(Enum):
         node_keywords: set,
         node_is_self: int,
     ) -> None:
-        """Creates a new action observation node.
+        """
+        Creates a new action observation node.
 
         This method constructs an `ObservationNode` representing an action taken by the agent,
         encapsulating relevant details such as the round, tick, description, and success status.
@@ -385,19 +394,19 @@ class MemoryType(Enum):
             ObservationNode: The newly created action observation node.
         """
 
-        return ObservationNode(  # Create and return a new ObservationNode instance
-            node_id,  # Unique identifier for the observation node
-            node_round=round,  # Current round in the game
-            node_tick=tick,  # Current tick or time step in the game
-            node_level=1,  # Level of the node, set to 1 for this action
-            node_loc=location,  # Location where the action took place
-            node_description=description,  # Description of the action
-            node_success=success_status,  # Indicates if the action was successful
-            embedding_key=node_id,  # Key for embedding, using the node ID
-            node_importance=memory_importance,  # Importance value of the action memory
-            node_type=type,  # Type of memory, specifically for actions
-            node_keywords=node_keywords,  # Set of keywords associated with the action
-            node_is_self=node_is_self,  # Indicates if the action was performed by the agent itself
+        return ObservationNode(
+            node_id,
+            node_round=round,
+            node_tick=tick,
+            node_level=1,
+            node_loc=location,
+            node_description=description,
+            node_success=success_status,
+            embedding_key=node_id,
+            node_importance=memory_importance,
+            node_type=type,
+            node_keywords=node_keywords,
+            node_is_self=node_is_self,
         )
 
     def add_reflection(
@@ -413,7 +422,8 @@ class MemoryType(Enum):
         node_keywords: set,
         node_is_self: int,
     ) -> None:
-        """Creates a new reflection observation node.
+        """
+        Creates a new reflection observation node.
 
         This method constructs an `ObservationNode` representing a reflection made by the agent,
         encapsulating relevant details such as the round, tick, description, and success status.
@@ -463,7 +473,8 @@ class MemoryType(Enum):
         node_keywords: set,
         node_is_self: int,
     ) -> None:
-        """Creates a new perception observation node.
+        """
+        Creates a new perception observation node.
 
         This method constructs an `ObservationNode` representing a perception made by the agent,
         encapsulating relevant details such as the round, tick, description, and success status.
@@ -502,7 +513,8 @@ class MemoryType(Enum):
 
     # ----------- GETTER METHODS -----------
     def get_observation(self, node_id):
-        """Retrieves an observation node by its unique identifier.
+        """
+        Retrieves an observation node by its unique identifier.
 
         This method attempts to fetch an observation node from the agent's memory using the provided node ID.
         If the node ID is invalid or out of range, it returns None, indicating that the observation does not exist.
@@ -514,15 +526,16 @@ class MemoryType(Enum):
             ObservationNode or None: The observation node associated with the given ID, or None if not found.
         """
 
+        # Attempt to retrieve the observation node using the provided node ID
         try:
-            return self.observations[
-                node_id
-            ]  # Attempt to retrieve the observation node using the provided node ID
+            return self.observations[node_id]
+        # Return None if the node ID is out of range or invalid
         except IndexError:
-            return None  # Return None if the node ID is out of range or invalid
+            return None
 
     def get_observation_description(self, node_id):
-        """Retrieves the description of an observation node by its unique identifier.
+        """
+        Retrieves the description of an observation node by its unique identifier.
 
         This method fetches the observation node using the provided node ID and returns its description.
         If the node does not exist, it may raise an error depending on the implementation of the `get_observation`
@@ -535,15 +548,14 @@ class MemoryType(Enum):
             str: The description of the observation node, or raises an error if the node does not exist.
         """
 
-        node = self.get_observation(
-            node_id
-        )  # Retrieve the observation node using the provided node ID
-        return (
-            node.node_description
-        )  # Return the description of the retrieved observation node
+        # Retrieve the observation node using the provided node ID
+        node = self.get_observation(node_id)
+        # Return the description of the retrieved observation node
+        return node.node_description
 
     def get_observation_type(self, node_id):
-        """Retrieves the type of an observation node by its unique identifier.
+        """
+        Retrieves the type of an observation node by its unique identifier.
 
         This method fetches the observation node using the provided node ID and returns its type.
         If the node does not exist, it returns None, indicating that the type cannot be retrieved.
@@ -555,15 +567,15 @@ class MemoryType(Enum):
             MemoryType or None: The type of the observation node, or None if the node does not exist.
         """
 
-        return node.node_type if (node := self.get_observation(node_id)) else None  
         # Retrieve the observation node using the provided node ID and assign it to 'node'.
         # If the node exists, return its type; otherwise, return None if the node does not exist.
-
+        return node.node_type if (node := self.get_observation(node_id)) else None
 
     def get_enumerated_description_list(
         self, node_id_list, as_type: Literal["str", "tuple"] = True
     ) -> Union[List[Tuple], List[str]]:
-        """Generates a list of observation descriptions paired with their IDs.
+        """
+        Generates a list of observation descriptions paired with their IDs.
 
         This method takes a list of node IDs and retrieves their corresponding descriptions,
         returning them either as a list of tuples or a formatted string list based on the specified type.
@@ -586,16 +598,19 @@ class MemoryType(Enum):
             )
         )  # Create a list of tuples by pairing each node ID with its corresponding description
 
-        if as_type == "tuple":  # Check if the requested output type is a tuple
-            return enum_nodes  # Return the list of tuples (node ID, description)
-        else:  # If the requested output type is not a tuple
-            return [f"{mem_id}. {mem_desc}\n" for mem_id, mem_desc in enum_nodes]  
+        # Check if the requested output type is a tuple
+        if as_type == "tuple":
+            # Return the list of tuples (node ID, description)
+            return enum_nodes
+        # If the requested output type is not a tuple
+        else:
             # Return a list of formatted strings, each containing the node ID and description, followed by a newline
             # character
-
+            return [f"{mem_id}. {mem_desc}\n" for mem_id, mem_desc in enum_nodes]
 
     def get_observation_embedding(self, text):
-        """Generates an embedded vector representation of the given text.
+        """
+        Generates an embedded vector representation of the given text.
 
         This method takes a text input and retrieves its corresponding embedded vector using a text embedding function.
         The resulting vector can be used for various applications, such as similarity comparisons or machine learning
@@ -608,10 +623,14 @@ class MemoryType(Enum):
             numpy.ndarray: The embedded vector representation of the input text.
         """
 
+        # TODO: Shouldn't this use the gpt_helpers.py module (see other TODO)
+        # return self.client.generate_embeddings(text)
+
         return get_text_embedding(text)
 
     def get_observations_by_round(self, round):
-        """Retrieves all observations associated with a specific round.
+        """
+        Retrieves all observations associated with a specific round.
 
         This method returns a list of observation nodes that were recorded during the specified round.
         It allows for easy access to all observations made in a particular round of the game.
@@ -626,7 +645,8 @@ class MemoryType(Enum):
         return self.this_round_nodes[round]
 
     def get_observations_after_round(self, round, inclusive=False):
-        """Retrieves all observations recorded after a specified round.
+        """
+        Retrieves all observations recorded after a specified round.
 
         This method collects and returns observation nodes from rounds that occur after the given round number.
         The inclusion of the specified round can be controlled by the `inclusive` parameter, allowing for flexibility in
@@ -645,33 +665,32 @@ class MemoryType(Enum):
 
         # Determine the rounds to request based on the inclusive flag
         if inclusive:
-            requested_rounds = [
-                r for r in self.this_round_nodes if r >= round
-            ]  # Include the specified round
+            # Include the specified round
+            requested_rounds = [r for r in self.this_round_nodes if r >= round]
         else:
-            requested_rounds = [
-                r for r in self.this_round_nodes if r > round
-            ]  # Exclude the specified round
+            # Exclude the specified round
+            requested_rounds = [r for r in self.this_round_nodes if r > round]
 
         # Iterate through the requested rounds to gather observation nodes
         for r in requested_rounds:
-            r_nodes = self.get_observations_by_round(
-                r
-            )  # Retrieve observation nodes for the current round
-            nodes.extend(r_nodes)  # Add the retrieved nodes to the list
+            # Retrieve observation nodes for the current round
+            r_nodes = self.get_observations_by_round(r)
+            # Add the retrieved nodes to the list
+            nodes.extend(r_nodes)
 
         return nodes  # Return the collected observation nodes
 
     def get_observations_by_type(self, obs_type):
-        """Retrieves all observations of a specified memory type.
+        """
+        Retrieves all observations of a specified memory type.
 
         This method checks if the provided observation type is valid and retrieves the corresponding observation nodes
         associated with that memory type. It raises an error if the type is unsupported, ensuring that only valid types
         are processed.
 
         Args:
-            obs_type (Union[int, MemoryType]): The type of memory observations to retrieve,
-                which can be specified as an integer or a MemoryType enum.
+            obs_type (Union[int, MemoryType]): The type of memory observations to retrieve, which can be specified as an
+            integer or a MemoryType enum.
 
         Raises:
             ValueError: If the provided observation type is not a supported MemoryType.
@@ -680,27 +699,26 @@ class MemoryType(Enum):
             list: A list of observation nodes associated with the specified memory type.
         """
 
-        if not self.is_valid_memory_type(
-            obs_type
-        ):  # Check if the provided observation type is valid
+        # Check if the provided observation type is valid
+        if not self.is_valid_memory_type(obs_type):
+            # Raise an error if the type is unsupported
             raise ValueError(
                 f"{obs_type} is not a supported MemoryType({list(MemoryType)})."
-            )  # Raise an error if the type is unsupported
+            )
 
-        if isinstance(
-            obs_type, MemoryType
-        ):  # Check if obs_type is an instance of the MemoryType enum
+        # Check if obs_type is an instance of the MemoryType enum
+        if isinstance(obs_type, MemoryType):
             # Convert Enum to its value
             obs_type = (
                 obs_type.value
             )  # Assign the integer value of the enum to obs_type
 
-        return self.memory_type_nodes[
-            obs_type
-        ]  # Return the list of observation nodes associated with the specified memory type
+        # Return the list of observation nodes associated with the specified memory type
+        return self.memory_type_nodes[obs_type]
 
     def get_most_recent_summary(self):
-        """Generates a summary of the most recent observations made by the agent.
+        """
+        Generates a summary of the most recent observations made by the agent.
 
         This method retrieves the last few observations based on the lookback attribute and formats them into a summary
         string. The summary provides a chronological list of the most recent observations, making it easy to review past
@@ -710,21 +728,22 @@ class MemoryType(Enum):
             str: A formatted summary of the last `lookback` observations made by the agent.
         """
 
-        nodes = self.observations[
-            -self.lookback :
-        ]  # Retrieve the last 'lookback' number of observations from the agent's memory
-        summary = f"The last {self.lookback} observations in chronological order you have made are:"  # Initialize the summary string
+        # Retrieve the last 'lookback' number of observations from the agent's memory
+        nodes = self.observations[-self.lookback :]
+        # Initialize the summary string
+        summary = f"The last {self.lookback} observations in chronological order you have made are:"
 
         # Iterate through the retrieved nodes to build the summary
         for i, node in enumerate(nodes):
-            summary += "\n{idx}. {desc}".format(
-                idx=i, desc=node.node_description
-            )  # Append each observation's description to the summary
+            # Append each observation's description to the summary
+            summary += "\n{idx}. {desc}".format(idx=i, desc=node.node_description)
 
-        return summary  # Return the complete summary of the most recent observations
+        # Return the complete summary of the most recent observations
+        return summary
 
     def get_embedding(self, index):
-        """Retrieves the embedding for a specified node index.
+        """
+        Retrieves the embedding for a specified node index.
 
         This method checks if a node exists at the given index and, if so, returns its corresponding embedding from
         memory. It is useful for accessing the vector representation of a node's description for further processing or
@@ -738,13 +757,14 @@ class MemoryType(Enum):
             node does not exist.
         """
 
-        if self.node_exists(index):  # Check if a node exists at the specified index
-            return self.memory_embeddings[
-                index
-            ]  # Return the embedding associated with the node at the given index
+        # Check if a node exists at the specified index
+        if self.node_exists(index):
+            # Return the embedding associated with the node at the given index
+            return self.memory_embeddings[index]
 
     def get_query_embeddings(self):
-        """Retrieves the query embeddings stored in the agent's memory.
+        """
+        Retrieves the query embeddings stored in the agent's memory.
 
         This method collects all non-empty query embeddings and returns them as a NumPy array.
         It is useful for accessing the embeddings that represent the current state of the agent's queries.
@@ -753,12 +773,17 @@ class MemoryType(Enum):
             np.array: An array containing the non-empty query embeddings.
         """
 
-        return np.array([q for q in self.query_embeddings.values() if q.all()])
         # Create and return a NumPy array containing all non-empty query embeddings from the query_embeddings dictionary
         # The condition q.all() ensures that only embeddings with all elements non-zero are included
+        # TODO: I'm switching this as it seems to ignore embeddings with 0's in the vector
+        # return np.array([q for q in self.query_embeddings.values() if q.all()])
+
+        # Create a NumPy array from the values of query_embeddings that aren't None None.
+        return np.array([q for q in self.values() if q is not None])
 
     def get_relationships_summary(self):
-        """Generates a summary of the agent's relationships.
+        """
+        Generates a summary of the agent's relationships.
 
         This method is intended to provide an overview of the relationships associated with the agent.
         However, it is not yet implemented and will raise a NotImplementedError if called.
@@ -771,7 +796,8 @@ class MemoryType(Enum):
 
     # ----------- SETTER METHODS -----------
     def set_embedding(self, node_id, new_embedding):
-        """Sets a new embedding for a specified node ID.
+        """
+        Sets a new embedding for a specified node ID.
 
         This method updates the embedding of a node if it exists in the memory.
         It returns a boolean indicating whether the update was successful, allowing for easy error handling.
@@ -784,20 +810,19 @@ class MemoryType(Enum):
             bool: True if the embedding was successfully updated; False if the node does not exist.
         """
 
-        if not self.node_exists(
-            node_id
-        ):  # Check if the node with the specified ID exists
-            return False  # Return False if the node does not exist, indicating the update was unsuccessful
+        # Check if the node with the specified ID exists
+        if not self.node_exists(node_id):
+            # Return False if the node does not exist, indicating the update was unsuccessful
+            return False
 
-        self.memory_embeddings.update(
-            {node_id: new_embedding}
-        )  # Update the memory_embeddings dictionary with the new embedding for the node
-        return (
-            True  # Return True to indicate that the embedding was successfully updated
-        )
+        # Update the memory_embeddings dictionary with the new embedding for the node
+        self.memory_embeddings.update({node_id: new_embedding})
+        # Return True to indicate that the embedding was successfully updated
+        return True
 
     def set_query_embeddings(self, character, round: int = 0):
-        """Sets the default query embeddings for the character based on their persona and goals.
+        """
+        Sets the default query embeddings for the character based on their persona and goals.
 
         This method retrieves the embeddings for the character's persona summary and current goals,
         caching them in a dictionary for later use. It handles cases where the character may not have goals defined,
@@ -811,40 +836,39 @@ class MemoryType(Enum):
             dict: A dictionary containing the cached query embeddings for the persona and goals.
         """
 
-        cached_queries = (
-            {}
-        )  # Initialize an empty dictionary to store cached query embeddings
+        # Initialize an empty dictionary to store cached query embeddings
+        cached_queries = {}
 
+        # Attempt to retrieve the goal embedding for the specified round
         try:
-            current_goal_embed = character.goals.get_goal_embedding(
-                round=round
-            )  # Attempt to retrieve the goal embedding for the specified round
+            current_goal_embed = character.goals.get_goal_embedding(round=round)
+
+        # If the character has no goals, set current_goal_embed to None
         except AttributeError:
-            current_goal_embed = (
-                None  # If the character has no goals, set current_goal_embed to None
-            )
+            current_goal_embed = None
 
-        persona_embed = get_text_embedding(
-            character.persona.summary
-        )  # Get the embedding for the character's persona summary
-        if (
-            persona_embed is not None
-        ):  # Check if the persona embedding was successfully retrieved
-            cached_queries["persona"] = (
-                persona_embed  # Store the persona embedding in the cached_queries dictionary
-            )
+        # Get the embedding for the character's persona summary
+        persona_embed = get_text_embedding(character.persona.summary)
 
-        if (
-            current_goal_embed is not None
-        ):  # Check if the goal embedding was successfully retrieved
-            cached_queries["goals"] = (
-                current_goal_embed  # Store the goal embedding in the cached_queries dictionary
-            )
+        # TODO: Shouldn't this use the gpt_helpers.py module (see other TODO)
+        # persona_embed = self.client.generate_embeddings(character.persona.summary)
 
-        return cached_queries  # Return the dictionary containing the cached query embeddings
+        # Check if the persona embedding was successfully retrieved
+        if persona_embed is not None:
+            # Store the persona embedding in the cached_queries dictionary
+            cached_queries["persona"] = persona_embed
+
+        # Check if the goal embedding was successfully retrieved
+        if current_goal_embed is not None:
+            # Store the goal embedding in the cached_queries dictionary
+            cached_queries["goals"] = current_goal_embed
+
+        # Return the dictionary containing the cached query embeddings
+        return cached_queries
 
     def set_goal_query(self, goal_embedding):
-        """Updates the query embeddings with the provided goal embedding.
+        """
+        Updates the query embeddings with the provided goal embedding.
 
         This method attempts to set the goal query embedding in the agent's query embeddings dictionary.
         If the update fails due to a KeyError, it catches the exception and prints an error message, allowing the
@@ -857,20 +881,19 @@ class MemoryType(Enum):
             None
         """
 
+        # Attempt to update the query_embeddings dictionary with the new goal embedding
         try:
-            self.query_embeddings.update(
-                {"goals": goal_embedding}
-            )  # Attempt to update the query_embeddings dictionary with the new goal embedding
-        except (
-            KeyError
-        ) as e:  # Catch a KeyError if the update fails due to a missing key
-            print(
-                "Goal query embedding update failed. Skipping. Caught:\n", e
-            )  # Print an error message indicating the failure and the exception details
+            self.query_embeddings.update({"goals": goal_embedding})
+
+        # Catch a KeyError if the update fails due to a missing key
+        except KeyError as e:
+            # Print an error message indicating the failure and the exception details
+            print("Goal query embedding update failed. Skipping. Caught:\n", e)
 
     # ----------- UPDATE METHODS -----------
     def update_node(self, node_id, **kwargs) -> bool:
-        """Updates the attributes of a specified node with new values.
+        """
+        Updates the attributes of a specified node with new values.
 
         This method retrieves a node by its ID and updates its attributes based on the provided keyword arguments.
         If the node does not exist, it returns False; otherwise, it applies the updates and returns True.
@@ -883,33 +906,27 @@ class MemoryType(Enum):
             bool: True if the node was successfully updated; False if the node does not exist.
         """
 
+        # Attempt to retrieve the observation node using the provided node ID
         try:
-            node = self.get_observation(
-                node_id
-            )  # Attempt to retrieve the observation node using the provided node ID
-        except (
-            IndexError
-        ):  # Catch an IndexError if the node ID is invalid or does not exist
-            return False  # Return False to indicate that the update failed due to a non-existent node
+            node = self.get_observation(node_id)
+        # Catch an IndexError if the node ID is invalid or does not exist
+        except IndexError:
+            # Return False to indicate that the update failed due to a non-existent node
+            return False
+
         else:
-            for (
-                k,
-                v,
-            ) in (
-                kwargs.items()
-            ):  # Iterate over the keyword arguments provided for updating the node
-                if hasattr(
-                    node, k
-                ):  # Check if the node has the attribute specified by the keyword argument
-                    setattr(
-                        node, k, v
-                    )  # Update the attribute of the node with the new value
-            return (
-                True  # Return True to indicate that the node was successfully updated
-            )
+            # Iterate over the keyword arguments provided for updating the node
+            for k, v in kwargs.items():
+                # Check if the node has the attribute specified by the keyword argument
+                if hasattr(node, k):
+                    # Update the attribute of the node with the new value
+                    setattr(node, k, v)
+            # Return True to indicate that the node was successfully updated
+            return True
 
     def update_node_embedding(self, node_id, new_description) -> bool:
-        """Updates the embedding of a specified node with a new description.
+        """
+        Updates the embedding of a specified node with a new description.
 
         This method checks if the node exists and, if so, retrieves the new embedding based on the provided description.
         It then updates the node's embedding and returns a boolean indicating whether the update was successful.
@@ -922,22 +939,21 @@ class MemoryType(Enum):
             bool: True if the embedding was successfully updated; False if the node does not exist.
         """
 
-        if not self.node_exists(
-            node_id
-        ):  # Check if the node with the specified ID exists
-            return False  # Return False if the node does not exist, indicating the update cannot proceed
+        # Check if the node with the specified ID exists
+        if not self.node_exists(node_id):
+            # Return False if the node does not exist, indicating the update cannot proceed
+            return False
 
-        updated_embedding = self.get_observation_embedding(
-            new_description
-        )  # Retrieve the updated embedding based on the new description
+        # Retrieve the updated embedding based on the new description
+        updated_embedding = self.get_observation_embedding(new_description)
 
-        return self.set_embedding(
-            node_id, updated_embedding
-        )  # Update the node's embedding and return the result of the update operation
+        # Update the node's embedding and return the result of the update operation
+        return self.set_embedding(node_id, updated_embedding)
 
     # ----------- MISC HELPER/VALIDATION METHODS -----------
     def replace_character(self, text, character_name, agent_descriptor):
-        """Replaces occurrences of a character's name and descriptor in the given text with 'you'.
+        """
+        Replaces occurrences of a character's name and descriptor in the given text with 'you'.
 
         This method uses regular expressions to identify and replace mentions of a specified character's name
         and their descriptor in the provided text, allowing for a more personalized narrative.
@@ -955,26 +971,27 @@ class MemoryType(Enum):
         # Escape any special regex characters in the descriptor and character_name
         escaped_name = re.escape(
             character_name
-        )  # Escape the character name to safely use it in a regex pattern
+        )
+        # Escape the descriptor, excluding any stopwords, to safely use it in a regex pattern
         escaped_descriptor = re.escape(
             " ".join([w for w in agent_descriptor.split() if w not in self.stopwords])
         )
-        # Escape the descriptor, excluding any stopwords, to safely use it in a regex pattern
 
         # Pattern to match 'the' optionally, then the descriptor optionally, followed by the character name
         # The descriptor and the character name can occur together or separately
         pattern = r"\b(?:the\s+)?(?:(?:{d}\s+)?{c}|{d})\b".format(
             d=escaped_descriptor, c=escaped_name
         )
-        # Construct the regex pattern to match the character's descriptor and name, allowing for optional articles
 
+        # Construct the regex pattern to match the character's descriptor and name, allowing for optional articles
         replacement = "you"  # Define the replacement string
 
         # Replace occurrences of the pattern in the text with 'you', ignoring case
         return re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
     def node_exists(self, node_id):
-        """Checks if a node exists based on its unique identifier.
+        """
+        Checks if a node exists based on its unique identifier.
 
         This method determines whether a node with the specified ID exists by comparing it to the total number of
         observations. It returns a boolean value indicating the existence of the node.
@@ -990,7 +1007,8 @@ class MemoryType(Enum):
         return node_id < self.num_observations
 
     def is_valid_memory_type(self, memory_type):
-        """Checks if the provided memory type is valid.
+        """
+        Checks if the provided memory type is valid.
 
         This method verifies whether the given memory type is an instance of the MemoryType enum or can be converted to
         it. It returns True if the memory type is valid and False otherwise, ensuring that only supported types are

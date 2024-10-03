@@ -89,7 +89,7 @@ def build_experiment(experiment_name, experiment_id, max_ticks=6, num_finalists=
         games.Game: An instance of the ExperimentGame configured with the specified parameters.
     """
 
-    # Locations
+    # Define Locations
     camp = things.Location(
         "Camp",
         "the tribe's base camp."
@@ -119,98 +119,115 @@ def build_experiment(experiment_name, experiment_id, max_ticks=6, num_finalists=
         "Jungle",
         "the deep jungle. There could be treasures hiding nearby.",
     )
+    # Set a property for the jungle location indicating it has an idol
     jungle.set_property("has_idol", True)
 
-    camp.add_connection("out", beach)
-    beach.add_connection("north", jungle_path)
-    beach.add_connection("south", ocean)
-    beach.add_connection("west", cliffs)
-    beach.add_connection("in", camp)
-    jungle_path.add_connection("south", beach)
-    jungle_path.add_connection("east", well)
-    jungle_path.add_connection("north", jungle)
-    well.add_connection("west", jungle_path)
-    jungle.add_connection("south", jungle_path)
-    ocean.add_connection("north", beach)
-    cliffs.add_connection("east", beach)
+    # Define connections between locations
+    camp.add_connection("out", beach)  # From camp to beach
+    beach.add_connection("north", jungle_path)  # From beach to jungle path
+    beach.add_connection("south", ocean)  # From beach to ocean
+    beach.add_connection("west", cliffs)  # From beach to cliffs
+    beach.add_connection("in", camp)  # From beach back to camp
+    jungle_path.add_connection("south", beach)  # From jungle path to beach
+    jungle_path.add_connection("east", well)  # From jungle path to well
+    jungle_path.add_connection("north", jungle)  # From jungle path to jungle
+    well.add_connection("west", jungle_path)  # From well to jungle path
+    jungle.add_connection("south", jungle_path)  # From jungle to jungle path
+    ocean.add_connection("north", beach)  # From ocean to beach
+    cliffs.add_connection("east", beach)  # From cliffs to beach
 
-    # Gettable Items
+    # Define Gettable Items
     fishing_pole = things.Item(
         "pole",
         "a fishing pole",
         "A SIMPLE FISHING POLE.",
     )
+    # Add fishing pole to the ocean location
     ocean.add_item(fishing_pole)
+    # Set a property for the ocean indicating it has fish
     ocean.set_property("has_fish", True)
 
+    # Define machete items and add them to respective locations
     machete1 = things.Item(
         "machete1",
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    camp.add_item(machete1)
+    camp.add_item(machete1)  # Add machete1 to camp
 
     machete2 = things.Item(
         "machete2",
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    well.add_item(machete2)
+    well.add_item(machete2)  # Add machete2 to well
 
     machete3 = things.Item(
         "machete3",
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    beach.add_item(machete3)
+    beach.add_item(machete3)  # Add machete3 to beach
 
     machete4 = things.Item(
         "machete2",
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    ocean.add_item(machete4)
+    ocean.add_item(machete4)  # Add machete4 to ocean
 
     machete5 = things.Item(
         "machete3",
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    jungle_path.add_item(machete5)
+    jungle_path.add_item(machete5)  # Add machete5 to jungle path
 
-
-    #EXPLORATION
+    # Define exploration clue item
     clue = things.Item(
         "idol clue",
         "a clue to the idol",
         "A CLUE THAT SAYS THE IDOL CAN BE FOUND IN THE JUNGLE WITH A MACHETE",
     )
+    # Add clue to the cliffs location
     cliffs.add_item(clue)
 
-    # Characters
+    # Initialize characters list
     characters = []
-    # EXPLORATION
+    # Set starting location for exploration
     start_at = camp
 
+
+    # Iterate over files in the "exploration_personas" directory
     for i, filename in enumerate(os.listdir("exploration_personas")):
+        # Check if the file has a .json extension
         if filename.endswith(".json"):
+            # Import the persona from the JSON file
             persona = Persona.import_persona("exploration_personas/" + filename)
+            # Create a GenerativeAgent instance using the imported persona
             character = GenerativeAgent(persona, architecture)
+            # Set the character's location to the camp
             location = camp
+            # Add the character to the specified location
             location.add_character(character)
+            # Append the character to the characters list
             characters.append(character)
+            # Print the character's name, location, and group information
             print(f"Character {character.name} starts at {location.name} and belongs to Group {architecture}")
-    
+
+    # Remove the first character from the list and assign it to the player variable
     player = characters.pop(0)
 
-    # The Game
+    # Initialize the game with the specified parameters
     game = ExperimentGame(start_at, 
-                          player, 
-                          characters, 
-                          custom_actions=None,
-                          max_ticks=max_ticks,
-                          num_finalists=num_finalists,
-                          experiment_name=experiment_name,
-                          experiment_id=experiment_id)
+                        player, 
+                        characters, 
+                        custom_actions=None,
+                        max_ticks=max_ticks,
+                        num_finalists=num_finalists,
+                        experiment_name=experiment_name,
+                        experiment_id=experiment_id)
 
+    # Return the initialized game instance
     return game
+

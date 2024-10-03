@@ -12,11 +12,17 @@ Description: defines how agents store interpersonal impressions and theory-of-mi
 
 """
 
-from collections import defaultdict  # Import defaultdict for creating dictionaries with default values
-from typing import TYPE_CHECKING  # Import TYPE_CHECKING for type hinting without runtime overhead
+from collections import (
+    defaultdict,
+)  # Import defaultdict for creating dictionaries with default values
+from typing import (
+    TYPE_CHECKING,
+)  # Import TYPE_CHECKING for type hinting without runtime overhead
 
 # local imports
-from text_adventure_games.assets.prompts import impressions_prompts as ip  # Import prompts for impressions
+from text_adventure_games.assets.prompts import (
+    impressions_prompts as ip,
+)  # Import prompts for impressions
 from text_adventure_games.gpt.gpt_helpers import (  # Import helper functions for GPT interactions
     limit_context_length,  # Function to limit the context length of prompts
     get_token_remainder,  # Function to get the remaining tokens available
@@ -24,12 +30,18 @@ from text_adventure_games.gpt.gpt_helpers import (  # Import helper functions fo
     context_list_to_string,  # Function to convert a list of contexts to a string
     GptCallHandler,  # Class to handle GPT calls
 )
-from text_adventure_games.agent.agent_cognition import retrieve  # Import retrieve function for agent cognition
-from text_adventure_games.utils.general import get_logger_extras  # Import utility for logging extras
+from text_adventure_games.agent.agent_cognition import (
+    retrieve,
+)  # Import retrieve function for agent cognition
+from text_adventure_games.utils.general import (
+    get_logger_extras,
+)  # Import utility for logging extras
 
 if TYPE_CHECKING:  # Check if type checking is enabled
     from text_adventure_games.games import Game  # Import Game class for type hints
-    from text_adventure_games.things import Character  # Import Character class for type hints
+    from text_adventure_games.things import (
+        Character,
+    )  # Import Character class for type hints
 
 IMPRESSION_MAX_OUTPUT = 512  # Define maximum output length for impressions
 

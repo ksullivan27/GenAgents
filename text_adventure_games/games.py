@@ -81,7 +81,9 @@ class Game:
         # Look up table for locations
         def location_map(location, acc):
             """
-            Recursively builds a mapping of locations starting from a given location. This function populates an accumulator dictionary with location names as keys and their corresponding location objects as values, traversing through all connected locations.
+            Recursively builds a mapping of locations starting from a given location. This function populates an
+            accumulator dictionary with location names as keys and their corresponding location objects as values,
+            traversing through all connected locations.
 
             Args:
                 location (Location): The starting location from which to build the mapping.
@@ -91,38 +93,54 @@ class Game:
                 dict: The updated accumulator dictionary containing the mapped locations.
             """
 
+            # Store the current location in the accumulator dictionary
             acc[location.name] = location
+
+            # Iterate through each connection of the current location
             for _, connection in location.connections.items():
+                # Check if the connection's name is not already in the accumulator
                 if connection.name not in acc:
+                    # Recursively map the connected location and update the accumulator
                     acc = location_map(connection, acc)
+
+            # Return the updated accumulator
             return acc
 
+        # Initialize locations by mapping the starting location with an empty dictionary
         self.locations = location_map(self.start_at, {})
 
-        # Parser
+        # Initialize the parser with the current instance
         self.parser = parsing.Parser(self)
 
-        # Add custom actions to parser
+        # Add custom actions to the parser if provided
         if custom_actions:
             print("Adding custom actions")
             for ca in custom_actions:
+                # Check if the custom action is a class and a subclass of actions.Action
                 if inspect.isclass(ca) and issubclass(ca, actions.Action):
+                    # Add the valid custom action to the parser
                     self.parser.add_action(ca)
                 else:
+                    # Raise an exception if the custom action is invalid
                     err_msg = f"ERROR: invalid custom action ({ca})"
                     raise Exception(err_msg)
 
-        # Visit each location and add any blocks found to parser
+        # Track seen locations to avoid duplicates
         seen_before = {}
+        # Iterate through each location in the locations dictionary
         for name, location in self.locations.items():
+            # Check if the location has blocks and hasn't been seen before
             if len(location.blocks) > 0 and name not in seen_before:
+                # Add each block found in the location to the parser
                 for b in location.blocks:
                     self.parser.add_block(b)
-                    seen_before[name] = True
+                # Mark the location as seen
+                seen_before[name] = True
 
     def set_parser(self, parser: parsing.Parser):
         """
-        Sets the parser for the game instance, allowing for command parsing and handling. This method updates the parser attribute with the provided parser instance, enabling the game to process user input effectively.
+        Sets the parser for the game instance, allowing for command parsing and handling. This method updates the parser
+        attribute with the provided parser instance, enabling the game to process user input effectively.
 
         Args:
             parser (parsing.Parser): The parser instance to be assigned to the game.
@@ -134,30 +152,82 @@ class Game:
         self.parser = parser
 
     def game_loop(self):
+        """Run the main game loop, processing player commands.
+
+        This function continuously prompts the player for input and processes
+        commands until the game is over. It starts by executing a default command
+        to look around, then enters a loop to handle user input.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Examples:
+            game_loop()  # Starts the game loop for the player.
         """
-        A simple loop that starts the game, loops over commands from the user,
-        and then stops if the game's state says the game is over.
-        """
+
         self.parser.parse_command("look")
 
+        # Start an infinite loop to continuously prompt for user input
         while True:
+            # Prompt the user for a command and store the input
             command = input("\n> ")
+
+            # Parse the entered command using the parser
             self.parser.parse_command(command)
+
+            # Check if the game is over after processing the command
             if self.is_game_over():
+                # Exit the loop if the game is over
                 break
 
     def is_won(self) -> bool:
+        """Determine if the game has been won.
+
+        This function checks the current state of the game to ascertain whether
+        the player has achieved the winning condition. Currently, it always
+        returns False, indicating that the game is not won.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            bool: False, indicating the game has not been won.
+
+        Raises:
+            None
+
+        Examples:
+            result = is_won()  # Returns False.
         """
-        A conditional check intended for subclasses to use for defining the
-        game's winning conditions.
-        """
+
         return False
 
     def is_game_over(self) -> bool:
+        """Check if the game has ended.
+
+        This function evaluates the current state of the game to determine if
+        it is over. It checks for conditions such as whether the game over state
+        has been set, if the player has died, or if the game has been won.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            bool: True if the game is over, otherwise False.
+
+        Raises:
+            None
+
+        Examples:
+            game_status = is_game_over()  # Returns True or False based on the game state.
         """
-        A conditional check that determines if the game is over. By default it
-        checks if the player has died or won.
-        """
+
         # Something has set the game over state
         if self.game_over:
             return True
@@ -169,154 +239,393 @@ class Game:
         return self.is_won()
 
     def add_character(self, character: Character):
+        """Add a character to the game.
+
+        This function adds a specified character to the game's character list
+        using the character's name as the key. It allows for easy management and
+        retrieval of characters within the game.
+
+        Args:
+            self: The instance of the class.
+            character (Character): The character to be added to the game.
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Examples:
+            add_character(new_character)  # Adds 'new_character' to the game's character list.
         """
-        Puts characters in the game
-        """
+
         self.characters[character.name] = character
 
     def describe(self) -> str:
+        """Generate a comprehensive description of the current game state.
+
+        This function compiles and returns a detailed description of the player's
+        current location, including exits, items, characters, and inventory. It
+        provides a holistic view of the environment and available interactions.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A formatted string containing the description of the current state.
+
+        Raises:
+            None
+
+        Examples:
+            current_description = describe()  # Retrieves the current game state description.
         """
-        Describe the current game state by first describing the current
-        location, then listing any exits, and then describing any objects
-        in the current location.
-        """
+
+        # Get the description of the current location and add a newline
         description = self.describe_current_location() + "\n"
+
+        # Append the descriptions of exits and add a newline
         description += self.describe_exits() + "\n"
+
+        # Append the descriptions of items and add a newline
         description += self.describe_items() + "\n"
+
+        # Append the descriptions of characters and add a newline
         description += self.describe_characters() + "\n"
+
+        # Append the description of the inventory without a newline
         description += self.describe_inventory() 
+
+        # Uncomment the following line to print the total description for debugging
         # print(f"total description: {description}")
+
+        # Return the complete description of the current game state
         return description
 
     def describe_current_location(self) -> str:
+        """Provide a description of the current location.
+
+        This function generates and returns a detailed description of the
+        player's current location within the game. It includes relevant
+        information that helps the player understand their surroundings.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A formatted string containing the description of the current location.
+
+        Raises:
+            None
+
+        Examples:
+            location_description = describe_current_location()  # Retrieves the description of the current location.
         """
-        Describe the current location by printing its description field.
-        """
-        loc_description = f"location: {self.player.name} is at {self.player.location.description}"
-        # print(f"location description: {loc_description}")
-        return loc_description
+
+        return f"location: {self.player.name} is at {self.player.location.description}"
 
     def describe_exits(self) -> str:
+        """Generate a description of available exits from the current location.
+
+        This function compiles a list of exits that the player can take from
+        their current location, detailing the direction and the name of the
+        connected location. It provides a clear overview of the possible paths
+        the player can explore.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A formatted string listing the available exits from the current location.
+
+        Raises:
+            None
+
+        Examples:
+            exit_description = describe_exits()  # Retrieves the description of exits from the current location.
         """
-        List the directions that the player can take to exit from the current
-        location.
-        """
+
         exits = []
         for direction in self.player.location.connections.keys():
             location = self.player.location.connections[direction]
-            exits.append(direction.capitalize() + " to " + location.name)
+            exits.append(f"{direction.capitalize()} to {location.name}")
         description = "exits: "
-        if len(exits) > 0:
+        if exits:
             description += f"From {self.player.location.name} {self.player.name} could go: "
             for exit in exits:
-                description += exit + ", "
+                description += f"{exit}, "
         # print(f"Exit description: {description}")
         return description
 
     def describe_items(self) -> str:
+        """Generate a description of items in the current location.
+
+        This function compiles a list of items present in the player's current
+        location, providing details about each item. If enabled, it also includes
+        hints for special commands associated with the items, enhancing the player's
+        understanding of their surroundings.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A formatted string listing the items in the current location and any associated hints.
+
+        Raises:
+            None
+
+        Examples:
+            item_description = describe_items()  # Retrieves the description of items in the current location.
         """
-        Describe what items are in the current location.
-        """
+
+        # Initialize the description string for items
         description = "items: "
+
+        # Check if there are any items in the player's current location
         if len(self.player.location.items) > 0:
+            # Append the player's name and a message indicating what they see
             description += f"{self.player.name} sees:"
+
+            # Iterate through each item in the current location
             for item_name in self.player.location.items:
+                # Retrieve the item object using its name
                 item = self.player.location.items[item_name]
-                description += item.description 
+
+                # Append the item's description to the overall description
+                description += item.description
+
+                # If hints are enabled, check for special commands associated with the item
                 if self.give_hints:
-                    special_commands = item.get_command_hints()
-                    if special_commands:
+                    if special_commands := item.get_command_hints():
+                        # Start the hint section in the description
                         description += "(hint "
+
+                        # Append each special command hint to the description
                         for cmd in special_commands:
-                            description += cmd + ", "
+                            description += f"{cmd}, "
+
+                        # Close the hint section
                         description += ")"
+
+                    # Add a semicolon to separate items
                     description += "; "
+
+        # Return the complete description of items in the current location
         return description
 
     def describe_characters(self) -> str:
+        """Generate a description of characters in the current location.
+
+        This function compiles a list of characters present in the player's
+        current location, excluding the player themselves. It provides an overview
+        of other characters that the player can interact with or observe.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A formatted string listing the characters in the current location.
+
+        Raises:
+            None
+
+        Examples:
+            character_description = describe_characters()  # Retrieves the description of characters in the current location.
         """
-        Describe what characters are in the current location.
-        """
+
+        # Initialize the description string for characters
         description = "characters: "
+
+        # Check if there are more than one character in the player's current location
         if len(self.player.location.characters) > 1:
+            # Append the player's name and a message indicating what they see
             description += f"{self.player.name} sees characters: "
+
+            # Iterate through each character in the current location
             for character_name in self.player.location.characters:
+                # Skip the player themselves to avoid including them in the list
                 if character_name == self.player.name:
                     continue
+
+                # Retrieve the character object using their name
                 character = self.player.location.characters[character_name]
-                # TODO: may want to change this to just the character name for ease of parsing later
-                description += character.name + ", "
+
+                # TODO: Consider changing this to just the character name for easier parsing later
+
+                # Append the character's name to the overall description
+                description += f"{character.name}, "
+
+        # Return the complete description of characters in the current location
         return description
 
     def describe_inventory(self) -> str:
+        """Generate a description of the player's inventory.
+
+        This function compiles a list of items currently held in the player's
+        inventory, providing details about each item. It informs the player of
+        what they have available for use or interaction within the game.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A formatted string describing the contents of the player's inventory.
+
+        Raises:
+            None
+
+        Examples:
+            inventory_description = describe_inventory()  # Retrieves the description of the player's inventory.
         """
-        Describes the player's inventory.
-        """
+
+        # Initialize the description string for the inventory
         inventory_description = "inventory: "
+
+        # Check if the player's inventory is empty
         if len(self.player.inventory) == 0:
+            # Append a message indicating that the inventory is empty
             inventory_description += f"{self.player.name} has nothing in inventory."
+            # Uncomment the following line to handle empty inventory logic
             # self.ok(empty_inventory, [], "Describe the player's inventory.")
         else:
-            # descriptions = []  # JD logical issue?
+            # Append a message indicating the contents of the player's inventory
             inventory_description += f"In {self.player.name} inventory, {self.player.name} has: "
+
+            # Iterate through each item in the player's inventory
             for item_name in self.player.inventory:
+                # Retrieve the item object using its name
                 item = self.player.inventory[item_name]
+
+                # Prepare a format string for the item description
                 d = "{item_description}, "
+
+                # Append the item's description to the inventory description
                 inventory_description += d.format(
-                    # item=item_name, 
+                    # item=item_name,  # Uncomment if needed for future logic
                     item_description=item.description
                 )
+
+        # Return the complete description of the player's inventory
         return inventory_description
 
     # The methods below read and write a game to JSON
     def to_primitive(self):
+        """Convert the game state to a primitive data structure.
+
+        This function creates a dictionary representation of the current game state,
+        including details about the player, starting location, game history, and
+        the status of the game. It also includes lists of characters, locations, and
+        actions, making it suitable for serialization or further processing.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            dict: A dictionary containing the primitive representation of the game state.
+
+        Raises:
+            None
+
+        Examples:
+            game_data = to_primitive()  # Retrieves a dictionary representation of the current game state.
         """
-        Serialize a game to json.
-        """
-        data = {
+
+        return {
             "player": self.player.name,
             "start_at": self.start_at.name,
-            "game_history": self.game_history,  # TODO this is empty?
+            "game_history": self.game_history,
             "game_over": self.game_over,
             "game_over_description": self.game_over_description,
             "characters": [c.to_primitive() for c in self.characters.values()],
             "locations": [l.to_primitive() for l in self.locations.values()],
-            "actions": sorted([a for a in self.parser.actions]),
+            "actions": sorted(list(self.parser.actions)),
         }
-        return data
 
     @classmethod
     def default_actions(self):
+        """Retrieve a dictionary of default actions available in the game.
+
+        This class method scans the `actions` module for all classes that are
+        subclasses of `actions.Action`, excluding the base class itself. It returns
+        a dictionary mapping action names to their corresponding action classes.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            dict: A dictionary containing action names as keys and action classes as values.
+
+        Raises:
+            None
+
+        Examples:
+            actions_dict = default_actions()  # Retrieves a dictionary of default actions.
         """
-        Generates a dictionary of all actions packaged as part of this library
-        """
+
+        # Initialize an empty dictionary to store found actions
         actions_found = {}
+
+        # Iterate through all members of the 'actions' module
         for member in dir(actions):
+            # Retrieve the attribute corresponding to the member name
             attr = getattr(actions, member)
-            if inspect.isclass(attr) and issubclass(attr, actions.Action):
-                # dont include base class
-                if not attr == actions.Action:
-                    actions_found[attr.action_name()] = attr
+
+            # Check if the attribute is a class and a subclass of actions.Action,
+            # while ensuring it is not the base class itself
+            if inspect.isclass(attr) and issubclass(attr, actions.Action) and not attr == actions.Action:
+                # Add the action name and class to the actions_found dictionary
+                actions_found[attr.action_name()] = attr
+
+        # Return the dictionary containing the found actions
         return actions_found
 
     @classmethod
     def default_blocks(self):
+        """Retrieve a dictionary of default blocks available in the game.
+
+        This class method scans the `blocks` module for all classes that are
+        subclasses of `blocks.Block`, excluding the base class itself. It returns
+        a dictionary mapping block names to their corresponding block classes.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            dict: A dictionary containing block names as keys and block classes as values.
+
+        Raises:
+            None
+
+        Examples:
+            blocks_dict = default_blocks()  # Retrieves a dictionary of default blocks.
         """
-        Generates as dictionary of all blocks packaged as part of this library
-        """
+
+        # Initialize an empty dictionary to store found blocks
         blocks_found = {}
+
+        # Iterate through all members of the 'blocks' module
         for member in dir(blocks):
+            # Retrieve the attribute corresponding to the member name
             attr = getattr(blocks, member)
-            if inspect.isclass(attr) and issubclass(attr, blocks.Block):
-                # dont include base class
-                if not attr == blocks.Block:
-                    # if this changes, also adjust _type in blocks.Block
-                    blocks_found[attr.__name__] = attr
+
+            # Check if the attribute is a class and a subclass of blocks.Block,
+            # while ensuring it is not the base class itself
+            if inspect.isclass(attr) and issubclass(attr, blocks.Block) and not attr == blocks.Block:
+                # Add the block's name and class to the blocks_found dictionary
+                blocks_found[attr.__name__] = attr
+
+        # Return the dictionary containing the found blocks
         return blocks_found
 
     @classmethod
     def from_primitive(cls, data, custom_actions=None, custom_blocks=None):
-        """
+        """Create an instance of the class from a primitive data structure.
+
+        This class method reconstructs the game state from a provided dictionary,
+        populating characters, locations, items, actions, and blocks. It performs
+        multiple passes to ensure all relationships and properties are correctly
+        established, and validates any custom actions or blocks provided.
+
         This complex method performs the huge job of converting a game from its
         primitive representation to fully formed python objects.
 
@@ -334,75 +643,111 @@ class Game:
 
         Once those steps are done, this method simply adds any remaining game
         fields to the game instance.
+
+        Args:
+            cls: The class itself.
+            data (dict): A dictionary containing the primitive representation of the game state.
+            custom_actions (list, optional): A list of custom action classes to include.
+            custom_blocks (list, optional): A list of custom block classes to include.
+
+        Returns:
+            instance: An instance of the class populated with the reconstructed game state.
+
+        Raises:
+            Exception: If any custom actions or blocks are invalid, or if there are unmapped actions in the data.
+
+        Examples:
+            game_instance = from_primitive(data)  # Creates a game instance from the provided data.
         """
+
+        # Define a named tuple to hold the skeleton context for characters, locations, and items
         SkeletonContext = namedtuple(
             "SkeletonContext", ["characters", "locations", "items"]
         )
 
-        # FIRST PASS
+        # FIRST PASS: Initialize characters, locations, and items from the provided data
 
+        # Create a dictionary of characters by their names, converting each from primitive data
         characters = {
             c["name"]: Character.from_primitive(c) for c in data["characters"]
         }
+
+        # Create a dictionary of locations by their names, converting each from primitive data
         locations = {l["name"]: Location.from_primitive(l) for l in data["locations"]}
+
+        # Initialize an empty dictionary for items
         items = {}
+
+        # Create a SkeletonContext instance to hold the characters, locations, and items
         context = SkeletonContext(characters, locations, items)
 
-        # SECOND PASS
+        # SECOND PASS: Establish relationships and properties for characters and locations
 
-        # Characters
+        # Process each character in the context
         for c in context.characters.values():
-            # locations
+            # Set the character's location object based on their location name
             l = context.locations[c.location]
             c.location = l
-            # inventory
+            
+            # Process each item in the character's inventory
             for item_name, item in c.inventory.items():
+                # If the item has a location, update its location to the corresponding location object
                 if hasattr(item, "location") and item.location:
                     l_obj = context.locations[item.location]
                     item.location = l_obj
+                # If the item has an owner, update its owner to the corresponding character object
                 elif hasattr(item, "owner") and item.owner:
                     c_obj = context.characters[item.owner]
                     item.owner = c_obj
+                # Add the item to the context's items dictionary
                 context.items[item_name] = item
 
-        # Locations
+        # Process each location in the context
         for l in context.locations.values():
-            # characters
+            # Update each character in the location to the corresponding character object
             for char_name, c in l.characters.items():
                 c_obj = context.characters[char_name]
                 l.characters[char_name] = c_obj
-            # connections
+            
+            # Update each connection in the location to the corresponding location object
             for dir_name, connection in l.connections.items():
                 c_obj = context.locations[connection]
                 l.connections[dir_name] = c_obj
-            # items
+            
+            # Process each item in the location
             for item_name, item in l.items.items():
+                # If the item has a location, update its location to the corresponding location object
                 if hasattr(item, "location") and item.location:
                     l_obj = context.locations[item.location]
                     item.location = l_obj
+                # If the item has an owner, update its owner to the corresponding character object
                 elif hasattr(item, "owner") and item.owner:
                     c_obj = context.characters[item.owner]
                     item.owner = c_obj
+                # Add the item to the context's items dictionary
                 context.items[item_name] = item
 
-        # THIRD PASS
+        # THIRD PASS: Handle actions and blocks
 
-        # Actions
+        # Retrieve the default actions available in the game
         action_map = cls.default_actions()
 
-        # Validate custom actions
+        # Validate any custom actions provided
         if custom_actions:
             for ca in custom_actions:
+                # Check if the custom action is a valid subclass of actions.Action
                 if inspect.isclass(ca) and issubclass(ca, actions.Action):
                     action_map[ca.action_name()] = ca
                 else:
+                    # Raise an error if the custom action is invalid
                     err_msg = f"ERROR: invalid custom action ({ca})"
                     raise Exception(err_msg)
 
-        # verify all commands from primitive data have an associated action
+        # Verify that all actions in the primitive data have corresponding actions in the action map
         action_names = list(action_map.keys())
         for action_name in data["actions"]:
             if action_name not in action_names:
+                # Raise an error if an unmapped action is found
                 err_msg = "".join(
                     [
                         f"ERROR: unmapped action ({action_name}) found in ",
@@ -411,95 +756,173 @@ class Game:
                 )
                 raise Exception(err_msg)
 
-        # Blocks
+        # Retrieve the default blocks available in the game
         block_map = cls.default_blocks()
 
-        # Validate custom blocks
+        # Validate any custom blocks provided
         if custom_blocks:
             for cb in custom_blocks:
+                # Check if the custom block is a valid subclass of blocks.Block
                 if inspect.isclass(cb) and issubclass(cb, blocks.Block):
                     block_map[cb.__name__] = cb
                 else:
+                    # Raise an error if the custom block is invalid
                     err_msg = f"ERROR: invalid custom block ({cb})"
                     raise Exception(err_msg)
 
-        # Instantiate all blocks for all locations
+        # Instantiate all blocks for each location
         for l in context.locations.values():
             for direction, block_data in l.blocks.items():
-                # it is possible for two locations to have the same block, so
-                # skip any that have already been instantiated
+                # Skip any blocks that have already been instantiated
                 if isinstance(block_data, blocks.Block):
                     continue
+                
+                # Get the class type for the block based on its type
                 cls_type = block_map[block_data["_type"]]
-                del block_data["_type"]
-                # we will copy the properties of relevant items before we
-                # install the block, so we can restore them after
+                del block_data["_type"]  # Remove the type key from block data
+                
+                # Create a property map to store properties of relevant items before installing the block
                 prop_map = {}
-                # replace thing names in primitive with thing instances
+                
+                # Replace names in the primitive data with actual instances
                 for param_name, param in block_data.items():
                     if param in context.items:
                         param_instance = context.items[param]
                     elif param in context.locations:
                         param_instance = context.locations[param]
                     block_data[param_name] = param_instance
-                    prop_map[param_name] = param_instance.properties.copy()
+                    prop_map[param_name] = param_instance.properties.copy()  # Store original properties
+                
+                # Instantiate the block from primitive data
                 instance = cls_type.from_primitive(block_data)
-                # restore properties found in primitive data
+                
+                # Restore properties found in the primitive data
                 for param_name, param in block_data.items():
                     param.properties = prop_map[param_name]
 
+        # Set the starting location and player character based on the primitive data
         start_at = context.locations[data["start_at"]]
         player = context.characters[data["player"]]
 
+        # Create an instance of the class with the starting location and player
         instance = cls(start_at, player, custom_actions=action_map.values())
-        instance.game_history = data["game_history"]
-        instance.game_over = data["game_over"]
-        instance.game_over_description = data["game_over_description"]
+        instance.game_history = data["game_history"]  # Restore game history
+        instance.game_over = data["game_over"]  # Restore game over state
+        instance.game_over_description = data["game_over_description"]  # Restore game over description
 
+        # Return the fully constructed instance
         return instance
 
+
     def to_json(self):
+        """Convert the game state to a JSON string.
+
+        This function transforms the current game state into a primitive data
+        structure and then serializes it into a JSON format. It provides a
+        convenient way to export the game state for storage or transmission.
+
+        Args:
+            self: The instance of the class.
+
+        Returns:
+            str: A JSON string representation of the game state.
+
+        Raises:
+            None
+
+        Examples:
+            json_data = to_json()  # Converts the game state to a JSON string.
         """
-        Creates a JSON version of a game's primitive data.
-        """
+
         data = self.to_primitive()
-        data_json = json.dumps(data)
-        return data_json
+        return json.dumps(data)
 
     @classmethod
     def from_json(cls, data_json, **kw):
+        """Create an instance of the class from a JSON string.
+
+        This class method deserializes a JSON string into a primitive data
+        structure and then reconstructs the game state by creating an instance
+        of the class. It allows for easy loading of game state from a JSON format.
+
+        Args:
+            cls: The class itself.
+            data_json (str): A JSON string representation of the game state.
+            **kw: Additional keyword arguments to pass to the from_primitive method.
+
+        Returns:
+            instance: An instance of the class populated with the reconstructed game state.
+
+        Raises:
+            None
+
+        Examples:
+            game_instance = from_json(json_data)  # Creates a game instance from the provided JSON string.
         """
-        Goes from JSON into actual game instances.
-        """
+
         data = json.loads(data_json)
-        instance = cls.from_primitive(data, **kw)
-        return instance
+        return cls.from_primitive(data, **kw)
 
     def save_game(self, filename):
+        """Save the current game state to a file in JSON format.
+
+        This function serializes the current game state into a JSON string and
+        writes it to a specified file. It provides a way to persist the game state
+        for later retrieval.
+
+        Args:
+            self: The instance of the class.
+            filename (str): The name of the file where the game state will be saved.
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Examples:
+            save_game("savefile.json")  # Saves the current game state to 'savefile.json'.
         """
-        Converts a game's state to JSON and then saves it to a file
-        """
+
         save_data = self.to_json()
         with open(filename, 'w') as f:
             f.write(save_data)
 
     @classmethod
     def load_game(cls, filename, **kw):
+        """Load a game state from a file in JSON format.
+
+        This class method reads a JSON string from a specified file and reconstructs
+        the game state by creating an instance of the class. It allows for easy
+        retrieval of previously saved game states.
+
+        Args:
+            cls: The class itself.
+            filename (str): The name of the file from which the game state will be loaded.
+            **kw: Additional keyword arguments to pass to the from_json method.
+
+        Returns:
+            instance: An instance of the class populated with the loaded game state.
+
+        Raises:
+            None
+
+        Examples:
+            game_instance = load_game("savefile.json")  # Loads the game state from 'savefile.json'.
         """
-        Reads a file with a game's state stored as JSON and converts it to a
-        game instance.
-        """
+
         with open(filename, 'r') as f:
             save_data = f.read()
             return cls.from_json(save_data, **kw)
 
-
 # Override methods or implement a new class?
 class SurvivorGame(Game):
-    """
-    Represents a Survivor game that extends the base game functionality with specific mechanics for a competitive
-    environment. This class manages the game state, player interactions, voting sessions, and the overall flow of the
-    game, including tracking contestants and determining a winner.
+    """A game class that simulates a survival competition among characters.
+
+    This class extends the base Game class to implement specific mechanics for a
+    survivor-style game, including character interactions, voting sessions, and
+    tracking of game state. It manages the progression of rounds and ticks, as well
+    as the end conditions for the game.
 
     Args:
         start_at (Location): The starting location of the player in the game.
@@ -546,31 +969,36 @@ class SurvivorGame(Game):
             None
         """
 
+        # Call the initializer of the parent Game class with the starting location, player, characters, and custom actions
         super().__init__(start_at, player, characters, custom_actions)
-        game_logger = logger.CustomLogger(experiment_name=experiment_name, sim_id=experiment_id)
-        self.logger = game_logger.get_logger()
-        self.experiment_name = experiment_name
-        self.experiment_id = game_logger.get_simulation_id()
-        
-        self.original_player_id = self.player.id
-        
-        # Game related tracking variables
-        self.max_ticks_per_round = max_ticks
-        self.round = 0
-        self.tick = 0
-        self.total_ticks = 0
-        self.num_contestants = len(self.characters)
-        self.end_state_check = end_state_check
-        
-        # Store end state variables: 
-        # Exiled players in jury cast the final vote
-        self.jury = {}
-        self.voting_history = defaultdict(lambda: defaultdict(list))
-        self.num_finalists = num_finalists
-        self.winner_declared = False
 
-        # Log the starting loctions of the characters
+        # Initialize a custom logger for the game with the experiment name and simulation ID
+        game_logger = logger.CustomLogger(experiment_name=experiment_name, sim_id=experiment_id)
+        self.logger = game_logger.get_logger()  # Retrieve the logger instance
+        self.experiment_name = experiment_name  # Store the experiment name
+        self.experiment_id = game_logger.get_simulation_id()  # Store the simulation ID
+
+        # Store the original player ID for reference
+        self.original_player_id = self.player.id
+
+        # Game related tracking variables
+        self.max_ticks_per_round = max_ticks  # Set the maximum number of ticks allowed per round
+        self.round = 0  # Initialize the current round to 0
+        self.tick = 0  # Initialize the current tick to 0
+        self.total_ticks = 0  # Initialize the total ticks counter
+        self.num_contestants = len(self.characters)  # Count the number of contestants in the game
+        self.end_state_check = end_state_check  # Set the condition for checking the end state
+
+        # Store end state variables: 
+        # Initialize a jury to hold exiled players who will cast the final vote
+        self.jury = {}
+        self.voting_history = defaultdict(lambda: defaultdict(list))  # Initialize a voting history tracker
+        self.num_finalists = num_finalists  # Set the number of finalists in the game
+        self.winner_declared = False  # Flag to indicate if a winner has been declared
+
+        # Log the starting locations of the characters for tracking purposes
         self._log_starting_locs()
+
 
     def update_world_info(self):
         """
@@ -585,14 +1013,20 @@ class SurvivorGame(Game):
             None
         """
 
-        params = {"contestant_count": len(self.characters),
-                  "contestant_names_locs": ", ".join([f"{c.name} who is at {c.location.name}" 
-                                                      for c in self.characters.values() 
-                                                      if c.id != self.player.id]),
-                  "n_finalists": self.num_finalists,
-                  "rounds_until_finals": len(self.characters) - self.num_finalists,
-                  "turns_left_this_round": self.max_ticks_per_round - (self.tick - 1)}
+        # Construct a dictionary of parameters to represent the current game state
+        params = {
+            "contestant_count": len(self.characters),  # Count the total number of contestants
+            "contestant_names_locs": ", ".join([f"{c.name} who is at {c.location.name}" 
+                                                for c in self.characters.values() 
+                                                if c.id != self.player.id]),  # List names and locations of contestants excluding the player
+            "n_finalists": self.num_finalists,  # Store the number of finalists in the game
+            "rounds_until_finals": len(self.characters) - self.num_finalists,  # Calculate rounds remaining until finals
+            "turns_left_this_round": self.max_ticks_per_round - (self.tick - 1)  # Calculate turns left in the current round
+        }
+
+        # Format the world information string using the constructed parameters
         self.world_info = world_info_prompt.world_info.format(**params)
+
     
     # Override game loop 
     def game_loop(self):
@@ -608,49 +1042,53 @@ class SurvivorGame(Game):
             None
         """
 
+        # Start an infinite loop to manage the game progression
         while True:
+            # Iterate through the ticks for the current round
             for tick in range(self.max_ticks_per_round):
-                self.tick = tick
+                self.tick = tick  # Update the current tick
 
-                # Confirming Round increments
+                # Print the current round and tick for confirmation
                 print(f"ROUND: {self.round}.{self.tick}")
-                
-                # If this is the end of the round, vote
+
+                # Uncomment the following lines to handle voting sessions at the end of the round
                 # if self.tick == (self.max_ticks_per_round - 1):
                 #     self.handle_voting_sessions()
-                
-                # Set goals for all characters at beginning of round
+
+                # Set goals for all characters at the beginning of the round
                 self.goal_setting_handler()
 
+                # Reset the dialogue state for all characters
                 self.reset_character_dialogue()
 
-                for character in permutation(list(self.characters.values())):  # random permuted ordering, not based on character initiative
-                    print(f"It is: {character.name}'s turn")
-                    self.turn_handler(character)
+                # Iterate through characters in a random order for their turns
+                for character in permutation(list(self.characters.values())):  # Random permuted ordering, not based on character initiative
+                    print(f"It is: {character.name}'s turn")  # Announce whose turn it is
+                    self.turn_handler(character)  # Handle the character's turn
 
-                    # EXPLORATION: check if game ended
+                    # Check if the game has ended after the character's action
                     if self.end_state_check == "on_action" and self.is_game_over():
-                        return 
+                        return  # Exit the game loop if the game is over
 
-                # Update the total ticks that have occurred in the game.
+                # Update the total ticks that have occurred in the game
                 self.total_ticks += 1
 
-                # EXPLORATION: check if game ended
+                # Check if the game has ended after the tick
                 if self.end_state_check == "on_tick" and self.is_game_over():
-                    break
-            
-            # NOTE: this placement allows agents to reflect prior to voting.
-            
-            if self.end_state_check == "on_round" and self.is_game_over():
-                break
+                    break  # Exit the tick loop if the game is over
 
-            # Increment the rounds
+            # Check if the game has ended at the end of the round
+            if self.end_state_check == "on_round" and self.is_game_over():
+                break  # Exit the main loop if the game is over
+
+            # Increment the round counter for the next iteration
             self.round += 1
 
-            # save game results so far
+            # Save the game results so far for later analysis
             self.save_simulation_data()
-            self._log_gpt_call_data()
-            self.save_game("test_file.json")
+            self._log_gpt_call_data()  # Log GPT call data for tracking
+            self.save_game("test_file.json")  # Save the current game state to a file
+
 
     def reset_character_dialogue(self):
         """
@@ -711,7 +1149,7 @@ class SurvivorGame(Game):
         for _ in range(3):
             if character.id == self.original_player_id:
                 # TODO: How do we integrate the ability for a human player to engage?
-                command = character.engage(self)
+                command = character.engage(self) 
             else:
                 command = character.engage(self)
 
@@ -733,17 +1171,19 @@ class SurvivorGame(Game):
             bool: True if the game is over; otherwise, False.
         """
 
-        if self.game_over:
-            return True
-        return self.is_won()
+        return True if self.game_over else self.is_won()
     
     def is_won(self):
         """
         Checks whether the game has been won. For SurvivorWorld, the game is won
         once any has been voted the victor.
         """
+        
         if self.winner_declared:
-            print(f"Congratulations!! {self.winner.name} won the game! They're the ultimate Survivor. Jeff is so proud of u")
+            print(
+                (f"""Congratulations!! {self.winner.name} won the game! """
+                 """They're the ultimate Survivor. Jeff is so proud of u""")
+            )
             return True
         return False
             
@@ -763,13 +1203,20 @@ class SurvivorGame(Game):
             ValueError: If the command is neither an integer nor a string.
         """
 
+        # Check if the command is an integer
         if isinstance(command, int):
+            # If the command is -999, it should not be enacted
             if command == -999:
-                return False
+                return False  # Return False to indicate the command should not be enacted
+
+        # Check if the command is a string
         elif isinstance(command, str):
-            return True
+            return True  # Return True to indicate the command can be enacted
+
+        # If the command is neither an integer nor a string, raise an error
         else:
-            raise ValueError(f"command: {command} must be str or int; got {type(command)}")
+            raise ValueError(f"command: {command} must be str or int; got {type(command)}")  # Raise an error with a descriptive message
+
 
     def view_character_locations(self):
         """
@@ -799,12 +1246,16 @@ class SurvivorGame(Game):
             None
         """
 
+        # Check if the number of characters is equal to the number of finalists
         if len(self.characters) == self.num_finalists:
-            # This should trigger the end of game
+            # If true, trigger the jury session to determine the winner
             self.run_jury_session()
-        # If we've reached the end of a round, run a voting session to exile someone.
+
+        # If the current tick is at the maximum for the round, initiate a voting session
         elif self.tick == (self.max_ticks_per_round - 1):
+            # Run a voting session to exile a character from the game
             self.run_voting_session()
+
 
     def update_voting_history(self, session: "VotingSession"):
         """
@@ -835,15 +1286,31 @@ class SurvivorGame(Game):
             None
         """
 
+        # Initialize a new voting session with the current game instance and the characters as participants
         self.vote_session = VotingSession(game=self, 
-                                          participants=self.characters.values())
+                                        participants=self.characters.values())
+
+        # Run the voting session to allow characters to cast their votes
         self.vote_session.run()
+
+        # Read the results of the voting session to determine which character was exiled
         exiled = self.vote_session.read_votes()
+
+        # Update the voting history with the results from the current voting session
         self.update_voting_history(session=self.vote_session)
+
+        # Process the state of the game based on the exiled character
         self.update_exile_state(exiled)
+
+        # Add the exiled character to the jury for final voting
         self.add_exiled_to_jury(exiled)
+
+        # Log the details of the exiled character for tracking purposes
         self._log_exiled_player(exiled)
+
+        # Print a message indicating that the character has been exiled and is now part of the jury
         print(f"{exiled.name} was exiled from the group and now sits on the jury.")
+
 
     def _log_exiled_player(self, exiled):
         """
@@ -857,9 +1324,15 @@ class SurvivorGame(Game):
             None
         """
 
+        # Count the number of contestants remaining in the game
         contestants_remaining = len(self.characters)
+
+        # Create a message indicating that the exiled character has been exiled and their position
         message = f"{exiled.name} was exiled. Position: {contestants_remaining + 1}"
+
+        # Log the vote for the exiled character along with the generated message
         self.vote_session.log_vote(exiled, message=message)
+
 
     def _log_gpt_call_data(self):
         """
@@ -873,14 +1346,27 @@ class SurvivorGame(Game):
             None
         """
 
+        # Retrieve logging extras for the current context, with no specific character
         extras = get_logger_extras(self, character=None)
+
+        # Set the type of log entry to "Calls" for tracking GPT call counts
         extras["type"] = "Calls"
+
+        # Create a message containing the current count of GPT calls
         message = f"Current GPT calls count: {GptCallHandler.get_calls_count()}"
+
+        # Log the message at the debug level, including the extras for context
         self.logger.debug(msg=message, extra=extras)
 
+        # Update the type of log entry to "Tokens" for tracking GPT token counts
         extras["type"] = "Tokens"
+
+        # Create a message containing the current count of GPT tokens processed
         message = f"Current GPT tokens count: {GptCallHandler.get_tokens_processed()}"
+
+        # Log the message at the debug level, including the extras for context
         self.logger.debug(msg=message, extra=extras)
+
 
     def _log_action(self, character, message):
         """
@@ -895,9 +1381,15 @@ class SurvivorGame(Game):
             None
         """
 
+        # Retrieve logging extras for the current context, including the specified character
         extras = get_logger_extras(self, character)
+
+        # Set the type of log entry to "Act" to indicate an action has occurred
         extras["type"] = "Act"
+
+        # Log the action message at the debug level, including the extras for context
         self.logger.debug(msg=message, extra=extras)
+
 
     def update_exile_state(self, exiled_agent):
         """
@@ -912,28 +1404,40 @@ class SurvivorGame(Game):
             None
         """
 
-        # Loop over them
+        # Loop over all characters in the game
         for character in list(self.characters.values()):
-            # Pass appropriate memories to each agent
+            # Check if the current character is the one that was exiled
             if character == exiled_agent:
+                # Add memory of the exile event for the exiled character, marking them for the jury
                 self.add_exile_memory(self.characters[character.name],
-                                      exiled_name=exiled_agent.name, 
-                                      to_jury=True)
-                # Make sure they do one final reflection and goal evaluation
+                                    exiled_name=exiled_agent.name, 
+                                    to_jury=True)
+                
+                # Ensure the exiled character reflects on their actions and evaluates their goals one last time
                 exiled_agent.engage(self)
-                # remove the agent that was exiled
+                
+                # Remove the exiled character from their current location
                 character.location.remove_character(character)
-                character.location = None
+                character.location = None  # Set the character's location to None
+                
+                # Remove the exiled character from the list of active characters
                 _ = self.characters.pop(character.name)
 
             else:
+                # For other characters, add memory of the exile event without marking them for the jury
                 self.add_exile_memory(self.characters[character.name],
-                                      exiled_name=exiled_agent.name,
-                                      to_jury=False)
-        
+                                    exiled_name=exiled_agent.name,
+                                    to_jury=False)
+
+        # Loop over all characters in the jury
         for character in list(self.jury.values()):
+            # Create a description of the exile event for the jury members
             description = f"{exiled_agent.name} was exiled and joins you on the jury to help decide the eventual game winner."
+            
+            # Extract keywords from the description for memory tracking
             desc_kwds = self.parser.extract_keywords(description)
+            
+            # Add the exile event memory to each jury member's memory
             character.memory.add_memory(self.round,
                                         tick=self.tick, 
                                         description=description, 
@@ -943,6 +1447,7 @@ class SurvivorGame(Game):
                                         memory_importance=10, 
                                         memory_type=MemoryType.ACTION.value,
                                         actor_id=character.id)
+
         
     def add_exiled_to_jury(self, exiled):
         """
@@ -974,24 +1479,34 @@ class SurvivorGame(Game):
             None
         """
 
+        # Retrieve the vote count for the specified character from the voting session tally
         vote_count = self.vote_session.tally.get(character.name)
+
+        # Get the total number of votes cast in the voting session
         vote_total = self.vote_session.tally.total()
+
+        # Check if the character is being added to the jury
         if to_jury:
+            # Create a description for the character being exiled and added to the jury
             description = "".join([
                 f"{character.name} was exiled with {vote_count} votes of {vote_total}. ",
                 f"{character.name} will be added to a jury and will be able to cast a vote ",
                 "at the end of the game to determine the overall winner."
             ])
-            
+
         else:
+            # Create a description for the character who survived the vote
             description = "".join([
-                f"{character.name} survived the vote. {character.name} recieved ",
+                f"{character.name} survived the vote. {character.name} received ",
                 f"{vote_count} out of {vote_total} votes. ",
                 f"{exiled_name} was exiled from the game but now sits on the final jury. ",
                 "They will be allowed to cast a vote to help determine the game winner."
             ])
 
+        # Extract keywords from the description for memory tracking
         desc_kwds = self.parser.extract_keywords(description)
+
+        # Add the memory of the voting outcome to the character's memory
         character.memory.add_memory(self.round,
                                     tick=self.tick, 
                                     description=description, 
@@ -1001,6 +1516,7 @@ class SurvivorGame(Game):
                                     memory_importance=10, 
                                     memory_type=MemoryType.ACTION.value,
                                     actor_id=character.id)
+
         
     def run_jury_session(self):
         """
@@ -1015,17 +1531,35 @@ class SurvivorGame(Game):
             None
         """
 
+        # Create a list of all characters in the game to serve as finalists
         finalists = list(self.characters.values())
+
+        # Initialize a new jury voting session with the current game instance, jury members, and finalists
         self.final_vote = JuryVotingSession(game=self,
                                             jury_members=list(self.jury.values()), 
                                             finalists=finalists)
+
+        # Run the jury voting session to allow jury members to cast their votes
         self.final_vote.run()
+
+        # Determine the winner based on the results of the final vote
         winner = self.final_vote.determine_winner()
+
+        # Update the voting history with the results from the final voting session
         self.update_voting_history(session=self.final_vote)
+
+        # Store the winner of the game
         self.winner = winner
+
+        # Set the flag to indicate that a winner has been declared
         self.winner_declared = True
+
+        # Log the details of the finalists, including the winner
         self._log_finalists(winner=winner)
+
+        # Add the winner's memory to all characters for future reference
         self._add_winner_memory()
+
 
     def _log_finalists(self, winner):
         """
@@ -1039,13 +1573,20 @@ class SurvivorGame(Game):
             None
         """
 
+        # Iterate through all characters in the game
         for char in self.characters.values():
+            # Check if the current character is the winner
             if char == winner:
+                # Create a message indicating that the character won the game and their position
                 message = f"{char.name} won the game. Position: 1"
             else:
-                # TODO: should eventually make this rank non-winners based on their votes received
+                # TODO: Implement logic to rank non-winners based on their votes received in the future
+                # Create a message indicating that the character lost the game and their position
                 message = f"{char.name} lost the game. Position: 2"
+            
+            # Log the vote result for the character, including the message about their outcome
             self.vote_session.log_vote(char, message=message)
+
             
     def _add_winner_memory(self):
         """
@@ -1060,25 +1601,35 @@ class SurvivorGame(Game):
             None
         """
 
+        # Retrieve the vote count for the winner from the final voting session tally
         vote_count = self.final_vote.tally.get(self.winner.name)
+
+        # Get the total number of votes cast in the final voting session
         vote_total = self.final_vote.tally.total()
+
+        # Create a description for the winner's memory using a predefined format
         description = vote_prompt.winner_memory_description.format(winner=self.winner.name,
-                                                                   for_votes=vote_count,
-                                                                   total_votes=vote_total)
+                                                                for_votes=vote_count,
+                                                                total_votes=vote_total)
+
+        # Extract keywords from the description for memory tracking
         winner_kwds = self.parser.extract_keywords(description)
 
-        # Pass this memory to all characters
+        # Combine all characters and jury members into a single list for memory updates
         everyone = list(self.characters.values()) + list(self.jury.values())
+
+        # Iterate through each character and jury member to update their memory
         for c in everyone:
-            c.memory.add_memory(round=self.round,
-                                tick=self.tick, 
-                                description=description, 
-                                keywords=winner_kwds, 
-                                location=None, 
-                                success_status=True,
-                                memory_importance=10, 
-                                memory_type=MemoryType.ACTION.value,
-                                actor_id=c.id)
+            c.memory.add_memory(round=self.round,  # Current round of the game
+                                tick=self.tick,  # Current tick of the game
+                                description=description,  # Description of the winner's memory
+                                keywords=winner_kwds,  # Keywords extracted from the description
+                                location=None,  # No specific location associated with this memory
+                                success_status=True,  # Indicate that the memory addition was successful
+                                memory_importance=10,  # Set the importance level of the memory
+                                memory_type=MemoryType.ACTION.value,  # Specify the type of memory
+                                actor_id=c.id)  # ID of the character or jury member
+
             
     def _log_starting_locs(self):
         """
@@ -1093,11 +1644,20 @@ class SurvivorGame(Game):
             None
         """
 
+        # Iterate through all characters in the game
         for c in self.characters.values():
+            # Retrieve logging extras for the current character
             extras = get_logger_extras(self, c)
+            
+            # Set the type of log entry to "Origin" to indicate the starting point of the character
             extras["type"] = "Origin"
+            
+            # Create a message indicating the starting location of the character
             message = f"Starting point: {c.location.name}"
+            
+            # Log the message at the debug level, including the extras for context
             self.logger.debug(msg=message, extra=extras)
+
 
     def save_simulation_data(self):
         """
@@ -1112,36 +1672,58 @@ class SurvivorGame(Game):
             None
         """
 
+        # Get the output path for saving log files
         output_path = get_output_logs_path()
+
+        # Create a directory path for the current experiment logs, including experiment name and ID
         experiment_dir = f"logs/{self.experiment_name}-{self.experiment_id}/"
+
+        # Construct the file path for saving voting history in JSON format
         fp = os.path.join(output_path, experiment_dir, f"voting_history_{self.experiment_name}-{self.experiment_id}.json")
+
+        # Create necessary directories for the file path
         create_dirs(fp)
 
-        # Save voting history
+        # Save the voting history to the specified JSON file
         with open(fp, mode="w") as f:
-            json.dump(self.voting_history, f, indent=4)
+            json.dump(self.voting_history, f, indent=4)  # Write the voting history with indentation for readability
 
-        # Save goal scores and goals
+        # Construct the file path for saving character goals in JSON format
         fp = os.path.join(output_path, experiment_dir, f"character_goals_{self.experiment_name}-{self.experiment_id}.json")
-        create_dirs(fp)
-        
-        with open(fp, mode="w") as f:
-            output = {}
-            for name, c in self.characters.items():
-                output[name] = c.get_goals() or "None"
 
+        # Create necessary directories for the file path
+        create_dirs(fp)
+
+        # Save the goals of each character to the specified JSON file
+        with open(fp, mode="w") as f:
+            # Create a dictionary of character names and their goals, defaulting to "None" if no goals exist
+            output = {name: c.get_goals() or "None" for name, c in self.characters.items()}
+            
+            # Add goals for jury members to the output dictionary
             for name, c in self.jury.items():
                 output[name] = c.get_goals() or "None"
+            
+            # Write the character goals to the JSON file
             json.dump(output, f, indent=4)
 
+        # Construct the file path for saving character goal scores in JSON format
         fp = os.path.join(output_path, experiment_dir, f"character_goal_scores_{self.experiment_name}-{self.experiment_id}.json")
+
+        # Create necessary directories for the file path
         create_dirs(fp)
 
+        # Save the goal scores of each character to the specified JSON file
         with open(fp, mode="w") as f:
-            output = {}
-            for name, c in self.characters.items():
-                output[name] = c.get_goal_scores() or "None"
-
+            # Create a dictionary of character names and their goal scores, defaulting to "None" if no scores exist
+            output = {
+                name: c.get_goal_scores() or "None"
+                for name, c in self.characters.items()
+            }
+            
+            # Add goal scores for jury members to the output dictionary
             for name, c in self.jury.items():
                 output[name] = c.get_goal_scores() or "None"
+            
+            # Write the character goal scores to the JSON file
             json.dump(output, f, indent=4)
+

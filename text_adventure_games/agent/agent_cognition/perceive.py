@@ -10,17 +10,19 @@ from typing import TYPE_CHECKING, Dict
 # Local imports for memory types and utility functions.
 from text_adventure_games.agent.memory_stream import MemoryType
 from text_adventure_games.utils.general import (
-    parse_location_description,
-    find_difference_in_dict_lists,
+    parse_location_description,  # Function to parse descriptions of locations.
+    find_difference_in_dict_lists,  # Function to find differences between lists of dictionaries.
 )
-from text_adventure_games.gpt.gpt_helpers import gpt_get_action_importance
+from text_adventure_games.gpt.gpt_helpers import (
+    gpt_get_action_importance,
+)  # Function to assess the importance of actions based on GPT.
 
 # Conditional import statements for type checking to avoid circular dependencies.
 if TYPE_CHECKING:
     from text_adventure_games.games import Game  # Import Game class for type hinting.
     from text_adventure_games.things import (
-        Character,
-    )  # Import Character class for type hinting.
+        Character,  # Import Character class for type hinting.
+    )
 
 
 def collect_perceptions(game: "Game"):
@@ -33,6 +35,7 @@ def collect_perceptions(game: "Game"):
     Returns:
         The description of the current location as provided by the game.
     """
+
     # Call the game's describe method to get the latest location information.
     return game.describe()
 
@@ -72,7 +75,8 @@ def perceive_location(game: "Game", character: "Character"):
 def add_new_observations(game: "Game", character: "Character", new_percepts: Dict):
     """
     Processes and adds new observations made by a character in the game.
-    This function iterates through the new percepts, logs what the character sees, and updates the character's memory with relevant details.
+    This function iterates through the new percepts, logs what the character sees, and updates the character's memory
+    with relevant details.
 
     Args:
         game (Game): The current game instance that contains the game state and mechanics.

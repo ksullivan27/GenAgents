@@ -5,17 +5,25 @@ File: agent_cognition/act.py
 Description: defines how agents select an action given their perceptions and memory
 """
 
-from __future__ import annotations
-from typing import TYPE_CHECKING
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+from __future__ import annotations  # Enables postponed evaluation of type annotations
+from typing import TYPE_CHECKING  # Allows conditional imports for type hints
+import numpy as np  # Imports NumPy for numerical operations
+from sklearn.metrics.pairwise import (
+    cosine_similarity,
+)  # Imports cosine similarity function for measuring similarity between vectors
 
 # local imports
-if TYPE_CHECKING:
-    from text_adventure_games.games import Game
-    from text_adventure_games.things.characters import Character
-from text_adventure_games.utils.general import (combine_dicts_helper,
-                                                get_text_embedding)
+if (
+    TYPE_CHECKING
+):  # Ensures that the following imports are only evaluated during type checking
+    from text_adventure_games.games import Game  # Imports Game class for type hinting
+    from text_adventure_games.things.characters import (
+        Character,
+    )  # Imports Character class for type hinting
+from text_adventure_games.utils.general import (  # Imports utility functions for general use
+    combine_dicts_helper,  # Function to combine dictionaries
+    get_text_embedding,  # Function to obtain text embeddings
+)
 
 # initially focus on the people that are around the current character
 
@@ -31,7 +39,14 @@ from text_adventure_games.utils.general import (combine_dicts_helper,
 # what is the query for dialogue?
 # initial is the dialogue command, subsequent is the last piece of dialogue
 
-def retrieve(game: "Game", character: "Character", query: str = None, n: int = -1, include_idx=False):
+
+def retrieve(
+    game: "Game",
+    character: "Character",
+    query: str = None,
+    n: int = -1,
+    include_idx=False,
+):
     """
     Retrieve relevant memory nodes for a given character based on a query.
     This function gathers keywords, ranks memory nodes, and returns a list of descriptions or indexed descriptions.
@@ -51,7 +66,7 @@ def retrieve(game: "Game", character: "Character", query: str = None, n: int = -
         list or None: A list of memory node descriptions or indexed descriptions, or None if no relevant memory nodes
         are found.
     """
-    
+
     # TODO: refine the inputs used to assess keywords for memory retrieval
     # TODO: WHAT IS THE QUERY STRING FOR RELEVANCY (COS SIM)?
 
@@ -76,15 +91,21 @@ def retrieve(game: "Game", character: "Character", query: str = None, n: int = -
     # Check if the index should be included in the output
     # If not, return a list of memory node descriptions as strings
     if not include_idx:
-        return [f"{character.memory.observations[t[0]].node_description}\n" for t in ranked_memory_ids]
+        return [
+            f"{character.memory.observations[t[0]].node_description}\n"
+            for t in ranked_memory_ids
+        ]
     else:
         # If including index, return a list of indexed memory node descriptions
-        return [f"{t[0]}. {character.memory.observations[t[0]].node_description}" for t in ranked_memory_ids]
+        return [
+            f"{t[0]}. {character.memory.observations[t[0]].node_description}"
+            for t in ranked_memory_ids
+        ]
 
 
 def rank_nodes(character, node_ids, query):
     """
-    Rank memory nodes based on recency, importance, and relevance to a given query. 
+    Rank memory nodes based on recency, importance, and relevance to a given query.
     This function calculates scores for each node and returns them sorted by their total score. It's a wrapper for the
     component scores that sum to define total node score
 
@@ -150,7 +171,7 @@ def calculate_node_recency(character, memory_ids):
 
 def calculate_node_importance(character, memory_ids):
     """
-    Calculate the importance scores for a list of memory nodes. 
+    Calculate the importance scores for a list of memory nodes.
     This function retrieves the importance values of specified memory nodes and normalizes them for consistent scaling.
 
     Args:
@@ -170,7 +191,7 @@ def calculate_node_importance(character, memory_ids):
 
 def calculate_node_relevance(character, memory_ids, query):
     """
-    Calculate the relevance scores of memory nodes based on their similarity to a given query. 
+    Calculate the relevance scores of memory nodes based on their similarity to a given query.
     This function uses embeddings to assess how closely related each memory node is to the query or to default queries
     if none is provided.
 
@@ -205,7 +226,7 @@ def calculate_node_relevance(character, memory_ids, query):
 
 def get_relevant_memory_ids(seach_keys, character):
     """
-    Retrieve a list of memory node IDs that are relevant to the provided search keywords. 
+    Retrieve a list of memory node IDs that are relevant to the provided search keywords.
     This function aggregates node IDs based on keyword types and their associated search words from the character's
     memory.
 
@@ -234,7 +255,7 @@ def get_relevant_memory_ids(seach_keys, character):
 
 def gather_keywords_for_search(game, character, query):
     """
-    Collect keywords for searching based on the character's recent memories, goals, and an optional query. 
+    Collect keywords for searching based on the character's recent memories, goals, and an optional query.
     This function extracts relevant keywords from the character's observations, current goals, and the provided query to
     facilitate memory retrieval.
 
@@ -251,10 +272,12 @@ def gather_keywords_for_search(game, character, query):
     retrieval_kwds = {}
 
     # 1. Gather keywords from the last 'n' memories, simulating "short term memory"
-    for node in character.memory.observations[-character.memory.lookback:]:
+    for node in character.memory.observations[-character.memory.lookback :]:
         # Extract keywords from the node's description and combine them into the retrieval dictionary
         if node_kwds := game.parser.extract_keywords(node.node_description):
-            retrieval_kwds = combine_dicts_helper(existing=retrieval_kwds, new=node_kwds)
+            retrieval_kwds = combine_dicts_helper(
+                existing=retrieval_kwds, new=node_kwds
+            )
 
     # 2. Gather keywords from the character's current goals
     # TODO: Confirm how goals are stored and if any parsing is needed to convert them to a string
@@ -284,7 +307,7 @@ def gather_keywords_for_search(game, character, query):
 
 def minmax_normalize(lst, target_min: int, target_max: int):
     """
-    Normalize a list of values to a specified range using min-max normalization. 
+    Normalize a list of values to a specified range using min-max normalization.
     This function scales the input values to fit within the target minimum and maximum, handling edge cases such as
     empty lists and non-numeric values.
 
@@ -309,7 +332,9 @@ def minmax_normalize(lst, target_min: int, target_max: int):
             max_val = np.nanmax(lst)  # Get the maximum value, ignoring NaNs
         except TypeError:
             # If another TypeError occurs, replace non-numeric values with 0 and then find min and max
-            fixed_list = [x if x else 0 for x in lst]  # Replace None or invalid values with 0
+            fixed_list = [
+                x if x else 0 for x in lst
+            ]  # Replace None or invalid values with 0
             min_val = np.nanmin(fixed_list)  # Get the minimum value, ignoring NaNs
             max_val = np.nanmax(fixed_list)  # Get the maximum value, ignoring NaNs
 
@@ -322,12 +347,18 @@ def minmax_normalize(lst, target_min: int, target_max: int):
 
     # Attempt to normalize the values to the specified range
     try:
-        out = [((x - min_val) * (target_max - target_min) / range_val + target_min) for x in lst]
+        out = [
+            ((x - min_val) * (target_max - target_min) / range_val + target_min)
+            for x in lst
+        ]
     except TypeError:
         # If there are None values in the list, replace them with the midpoint value of the range
         mid_val = (max_val + min_val) / 2  # Calculate the midpoint
         tmp = [x or mid_val for x in lst]  # Replace None values with the midpoint
-        out = [((x - min_val) * (target_max - target_min) / range_val + target_min) for x in tmp]  # Normalize the adjusted list
+        out = [
+            ((x - min_val) * (target_max - target_min) / range_val + target_min)
+            for x in tmp
+        ]  # Normalize the adjusted list
 
     # Return the normalized values as a numpy array
     return np.array(out)

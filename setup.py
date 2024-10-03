@@ -1,17 +1,22 @@
-from setuptools import setup, find_packages
-import os
-import re
+from setuptools import setup, find_packages  # Importing setup and find_packages from setuptools for packaging
+import os  # Importing os for file path operations
+import re  # Importing re for regular expression operations
 
-from text_adventure_games import __version__
+from text_adventure_games import __version__  # Importing the version of the text_adventure_games package
 
+# Base installation requirements for the game
 base_game_install_reqs = ['jupyter', 'graphviz']
 
+# Reading the long description from the README file
 with open("README.md", "r") as fh:
-    long_description = fh.read()
+    long_description = fh.read()  # Storing the content of README.md in long_description
 
+# Reading the requirements from requirements.txt
 with open(os.path.join(os.path.dirname(__file__), "requirements.txt"), 'r') as reqs:
+    # Filtering out comments and empty lines from the requirements file
     install_packages = [req for req in reqs.read().split('\n') if not re.match(r"#\s?", req) and req]
-    install_packages.extend(base_game_install_reqs)
+    install_packages.extend(base_game_install_reqs)  # Adding base game installation requirements to the list
+
 
 setup(
     name='text adventure games',

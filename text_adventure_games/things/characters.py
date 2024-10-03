@@ -241,7 +241,6 @@ class Character(Thing):
         # Set the owner of the item to the current instance
         item.owner = self
 
-
     def is_in_inventory(self, item):
         """
         Check if an item is present in the character's inventory.
@@ -455,7 +454,7 @@ class GenerativeAgent(Character):
                     f"{common_prefix.strip()}: {', '.join(unique_parts)}"
                 )
             else:
-                # If there is no common prefix, join the perceptions with 'or' and append to the descriptions.
+                # If there is no common prefix, join the perceptions with ', ' and append to the descriptions.
                 perception_descriptions.append(", ".join(percept))
 
         # Return the formatted string of perception descriptions, joining them with new lines.
@@ -712,13 +711,13 @@ class GenerativeAgent(Character):
         """
         Create a character instance from a primitive data structure.
 
-        This class method constructs a new character instance using the provided data, 
-        populating its attributes based on the input dictionary. It initializes various 
+        This class method constructs a new character instance using the provided data,
+        populating its attributes based on the input dictionary. It initializes various
         properties such as goals, impressions, memory, and interaction history.
 
         Args:
-            data (dict): A dictionary containing the character's attributes, including 
-                        name, description, persona, use_goals, use_impressions, and 
+            data (dict): A dictionary containing the character's attributes, including
+                        name, description, persona, use_goals, use_impressions, and
                         search_idol_count.
 
         Returns:
@@ -746,7 +745,9 @@ class GenerativeAgent(Character):
 
         # Initialize the impressions for the agent if impressions are enabled
         # TODO: construct Impressions using the given data
-        instance.impressions = Impressions(instance) if instance.use_impressions else None
+        instance.impressions = (
+            Impressions(instance) if instance.use_impressions else None
+        )
 
         # Initialize a memory stream to track observations made by the agent
         instance.memory = MemoryStream(instance)
@@ -904,6 +905,7 @@ class DiscoveryAgent(GenerativeAgent):
 
         self.score += add_on
 
+    # TODO: I don't think this is necessary seeing that the same method is implemented the same way in the parent class.
     def engage(self, game) -> Union[str, int]:
         """
         Manage the agent's actions and interactions within the game during a round.

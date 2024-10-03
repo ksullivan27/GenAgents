@@ -5,9 +5,11 @@ File: agent_cognition/act.py
 Description: defines how agents select an action given their perceptions and memory
 """
 
+import contextlib
+
 # Steps to choosing an action:
 # 1. perceive environment (perceive) -- already put into memory
-# 2. collect goals, world info, character relationships (retreive)
+# 2. collect goals, world info, character relationships (retrieve)
 # 3. get a list of the currently available actions (game.actions)
 # 4. Ask GPT to pick an option
 # 5. Parse and return
@@ -278,7 +280,7 @@ class Act:
         tok_count = 0
 
         # Attempt to retrieve impressions of characters in view and limit their token count.
-        try:
+        with contextlib.suppress(AttributeError):
             impressions = self.character.impressions.get_multiple_impressions(
                 chars_in_view
             )
@@ -290,10 +292,6 @@ class Act:
             )
             # Append the impressions to the user message.
             user_messages += context_list_to_string(impressions)
-        except AttributeError:
-            # If there is an error retrieving impressions, simply pass.
-            pass
-
         # Retrieve all relevant memories related to the current situation.
         memories_list = retrieve(
             self.game, self.character, query=None, n=40

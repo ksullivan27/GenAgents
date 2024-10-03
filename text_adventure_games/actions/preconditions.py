@@ -152,15 +152,27 @@ def was_matched(
     thing: Thing, error_message: str = None, describe_error: bool = True
 ) -> bool:
     """
-    Checks to see if the thing was matched by the parser.
+    Checks if a given object is matched by the parser and not None. This function is useful for validating the presence
+    of an object and can optionally provide error messaging if the object is not found.
+
+    Args:
+        thing (Thing): The object to be checked for a match.
+        error_message (str, optional): An optional message to describe the error if the object is not matched.
+        describe_error (bool, optional): A flag indicating whether to describe the error in detail.
+
+    Returns:
+        bool: True if the object is matched (not None), otherwise False.
     """
+
+    # Check if the provided object is None, indicating it was not matched.
     if thing is None:
-        # if not error_message:
-        #     message = "{thing_type} was not matched by the parser.".format(
-        #         thing_type=thing.name.capitalize()  # JD logical change
-        #     )
-        # if describe_error:
-        #     describe_failed_command(message, game)
-        return False
+        # The following lines are commented out but would create an error message
+        # if no error message is provided, indicating that the object was not matched.
+        # message = "{thing_type} was not matched by the parser.".format(
+        #     thing_type=thing.name.capitalize()  # Capitalize the name of the thing for the message.
+        # )
+        # If describe_error is True, this would call a function to describe the failed command.
+        # describe_error would provide additional context for the error.
+        return False  # Return False since the object was not matched.
     else:
-        return True
+        return True  # Return True since the object is valid and matched.

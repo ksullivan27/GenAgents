@@ -13,6 +13,7 @@ from typing import ClassVar  # For type hinting class variables.
 import openai  # For interacting with the OpenAI API.
 import tiktoken  # For tokenization of text.
 import httpx  # For making HTTP requests.
+import numpy as np  # Importing numpy for numerical operations and array handling.
 
 # Local imports from the project's utility modules.
 from ..utils.general import (
@@ -211,6 +212,7 @@ class GptCallHandler:
         calls_made (ClassVar[int]): A count of the total API calls made.
         input_tokens_processed (ClassVar[int]): A count of the total input tokens processed.
         output_tokens_processed (ClassVar[int]): A count of the total output tokens processed.
+        embedding_tokens_processed (ClassVar[int]): A count of the total embedding tokens processed.
 
         api_key_org (str): The organization identifier for the OpenAI API.
         model (str): The model to be used for API calls.
@@ -241,10 +243,16 @@ class GptCallHandler:
     output_tokens_processed: ClassVar[int] = (
         0  # Tracks the total number of output tokens processed by all instances.
     )
+    embedding_tokens_processed: ClassVar[int] = (
+        0  # Tracks the total number of embedding tokens processed by all instances.
+    )
 
     # Instance variables that are unique to each instance of the class.
     api_key_org: str = "Helicone"  # The organization identifier for the OpenAI API.
     model: str = "gpt-4"  # The specific model to be used for API calls.
+    embedding_model: str = (
+        "text-embedding-3-small"  # The specific model to be used for embedding API calls.
+    )
     max_tokens: int = 256  # The maximum number of tokens to generate in the response.
     temperature: float = (
         1.0  # Controls the randomness of the output; higher values mean more randomness.
@@ -425,6 +433,18 @@ class GptCallHandler:
         return cls.get_input_tokens_processed + cls.get_output_tokens_processed
 
     @classmethod
+    def get_embedding_tokens_processed(cls):
+        """
+        Returns the total number of embedding tokens processed across all instances of the class. This class method
+        provides a way to access the token count without needing an instance of the class.
+
+        Returns:
+            int: The total number of embedding tokens processed.
+        """
+
+        return cls.embedding_tokens_processed
+
+    @classmethod
     def update_input_token_count(cls, add_on: int):
         """
         Updates the total count of input tokens processed across all instances of the class by adding a specified
@@ -449,6 +469,19 @@ class GptCallHandler:
         """
 
         cls.output_tokens_processed += add_on
+
+    @classmethod
+    def update_embedding_token_count(cls, add_on: int):
+        """
+        Updates the total count of embedding tokens processed across all instances of the class by adding a specified
+        number. This class method allows for tracking the cumulative number of embedding tokens processed during API
+        interactions.
+
+        Args:
+            add_on (int): The number of tokens to add to the total embedding processed count.
+        """
+
+        cls.embedding_tokens_processed += add_on
 
     def generate(
         self, system: str = None, user: str = None, messages: list = None
@@ -564,6 +597,94 @@ class GptCallHandler:
                     0
                 ].message.content  # Return the content of the model's response.
 
+    def generate_embeddings(self, text: str, *args) -> list:
+        """
+        Generates embeddings for the provided text using the OpenAI client.
+
+        This method attempts to create an embedding vector for the specified text, handling various potential errors
+        that may arise during the API call. It includes retry logic for timeouts and rate limits, ensuring robust
+        interaction with the OpenAI service.
+
+        Args:
+            text (str): The input text for which to generate embeddings. If empty, the function returns None.
+            *args: Additional parameters to be passed to the OpenAI client.
+
+        Returns:
+            list: A NumPy array containing the generated embedding vector, or None if the input text is empty.
+
+        Raises:
+            openai.AuthenticationError: If the API credentials are invalid.
+        """
+
+        # Check if the input text is empty; if so, return None to indicate no embedding can be generated.
+        if not text:
+            return None
+
+        i = 0
+        # Attempt to make the API call with a maximum number of retries.
+        while i < self.max_retries:
+            try:
+                # Create an embedding vector for the provided text using the OpenAI client.
+                response = (
+                    self.client.embeddings.create(
+                        input=[text], model=self.embedding_model, *args
+                    )
+                )
+            except openai.APITimeoutError as e:
+                # Handle timeout errors where the request took too long.
+                self._log_gpt_error(e)  # Log the error for debugging.
+                self._handle_TimeoutError(
+                    e, attempt=i
+                )  # Handle the timeout error with custom logic.
+                continue  # Retry the API call.
+            except openai.RateLimitError as e:
+                # Handle rate limit errors when the API usage exceeds allowed limits.
+                self._log_gpt_error(e)  # Log the error for debugging.
+                wait_time = self._handle_RateLimitError(
+                    e, attempt=i
+                )  # Get the wait time before retrying.
+                print(
+                    f"Rate limit exceeded, waiting {wait_time} seconds."
+                )  # Inform the user of the wait time.
+                time.sleep(wait_time)  # Pause execution for the specified wait time.
+                continue  # Retry the API call.
+            except openai.BadRequestError as e:
+                # Handle bad request errors due to invalid input.
+                success, info = self._handle_BadRequestError(
+                    e
+                )  # Process the error and get relevant info.
+                self._log_gpt_error(e)  # Log the error for debugging.
+                return (
+                    success,
+                    info,
+                )  # Return the success status and info for further handling.
+            except openai.InternalServerError as e:
+                # Handle internal server errors indicating issues with the OpenAI service.
+                self._handle_InternalServerError(
+                    e
+                )  # Handle the internal server error with custom logic.
+                self._log_gpt_error(e)  # Log the error for debugging.
+                continue  # Retry the API call.
+            except openai.APIConnectionError as e:
+                # Handle connection errors that may occur during the API call.
+                self._handle_APIConnectionError(
+                    e
+                )  # Handle the connection error with custom logic.
+                self._log_gpt_error(e)  # Log the error for debugging.
+            except openai.AuthenticationError as e:
+                # Handle authentication errors due to invalid API credentials.
+                print(
+                    "Your api credentials caused an error. Check your config file."
+                )  # Inform the user of the issue.
+                raise e  # Raise the error to stop execution.
+            else:
+                # If the API call is successful, update the embedding token counts and increment the call count.
+                self._set_embedding_token_counts(text)  # Update the embedding token counts (the number of input tokens).
+                # print("incrementing the number of calls to GPT")  # Uncomment to log the increment action.
+                GptCallHandler.increment_calls_count()  # Increment the total number of API calls made.
+                # Get the response embeddings, and convert them to a NumPy array for further processing or analysis.
+                return np.array(response.data[0].embedding)
+
     def _set_token_counts(self, response, system=None, user=None, messages=None):
         """
         Updates the total token counts based on the provided API response and optional system, user, or message inputs.
@@ -634,6 +755,31 @@ class GptCallHandler:
 
                 # Update the total token count by adding the calculated prompt token count and padding.
                 GptCallHandler.update_input_token_count(prompt_tkn_count + pad)
+
+    def _set_embedding_token_counts(self, text):
+        """
+        Sets the embedding token counts based on the provided text.
+
+        This method calculates the number of embedding tokens for the given text and updates the total input and output
+        token counts in the GptCallHandler. It ensures that the token usage is accurately tracked for the embedding
+        process.
+
+        Args:
+            text (str): The text for which to calculate the embedding token count.
+
+        Returns:
+            None
+        """
+
+        # Calculate the number of embedding tokens for the provided text.
+        if embedding_tokens := get_prompt_token_count(
+            text,
+            role=None,
+            pad_reply=False,  # Call the function to get the token count without padding the role or reply.
+        ):
+            # If the token count is successfully retrieved, update the input and output token counts in the
+            # GptCallHandler.
+            GptCallHandler.update_embedding_token_count(embedding_tokens)
 
     def _log_gpt_error(self, e):
         """

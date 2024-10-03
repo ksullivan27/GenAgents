@@ -59,6 +59,7 @@ def get_root_dir(n=2) -> Union[str, PathLike]:
 #         Union[str, PathLike]: _description_
 #     """
 
+
 def get_config_file():
     """
     Retrieves configuration variables from a JSON configuration file. This function first attempts to locate a visible
@@ -80,18 +81,20 @@ def get_config_file():
     if not os.path.exists(config_path):
         # If the visible config is not found, print a message and attempt to find the hidden config file.
         print("visible config not found, trying invisible option")
-        
+
         # Construct the path to the hidden configuration file by joining the root directory path with ".config.json".
         config_path = os.path.join(get_root_dir(n=3), ".config.json")
-        
+
         # Check if the hidden configuration file exists.
         if not os.path.exists(config_path):
             # Raise an error if neither configuration file is found, indicating that the required configuration is
             # missing.
-            raise FileNotFoundError("No config file found. Store your OpenAI key in a variable \"OPENAI_API_KEY\".")
+            raise FileNotFoundError(
+                'No config file found. Store your OpenAI key in a variable "OPENAI_API_KEY".'
+            )
 
     # Open the configuration file for reading.
-    with open(config_path, 'r') as cfg:
+    with open(config_path, "r") as cfg:
         # Load the configuration variables from the JSON file into a dictionary.
         config_vars = json.load(cfg)
 
@@ -115,15 +118,13 @@ def get_openai_api_key(organization):
     Raises:
         None
     """
-    
+
     # Retrieve the configuration variables from the configuration file.
     config_vars = get_config_file()
 
-    # Use the walrus operator (:=) to assign the organization configuration to 'org_config' 
+    # Use the walrus operator (:=) to assign the organization configuration to 'org_config'
     # while checking if it exists in the 'config_vars' dictionary.
-    if org_config := config_vars.get("organizations", {}).get(
-        organization, None
-    ):
+    if org_config := config_vars.get("organizations", {}).get(organization, None):
 
         # Retrieve the API key from the organization's configuration.
         api_key = org_config.get("api_key", None)
@@ -132,7 +133,9 @@ def get_openai_api_key(organization):
         return api_key
 
     # If no matches are found for the specified organization, print a warning message.
-    print(f"{organization} not found in list of valid orgs. You may not have a key set up for {organization}.")
+    print(
+        f"{organization} not found in list of valid orgs. You may not have a key set up for {organization}."
+    )
     # Return None if the organization does not have an associated API key.
     return None
 
@@ -154,7 +157,7 @@ def get_helicone_base_path(organization="Helicone"):
         ValueError: If the organization is not "Helicone", indicating that the method is only valid for that
         organization.
     """
-        
+
     # TODO: Specify Helicone vs Personal API key
 
     # Check if the specified organization is "Helicone"; raise an error if it is not.
@@ -165,14 +168,14 @@ def get_helicone_base_path(organization="Helicone"):
     config_vars = get_config_file()
 
     # If it exists, access the configuration for the specified organization from the loaded config variables.
-    if org_config := config_vars.get("organizations", {}).get(
-        organization, None
-    ):
+    if org_config := config_vars.get("organizations", {}).get(organization, None):
         # Retrieve the base URL from the organization's configuration.
         return org_config.get("base_url", None)
 
     # If no matches are found for the specified organization, print a warning message.
-    print(f"{organization} not found in list of valid orgs. You may not have a base url set up for {organization}.")
+    print(
+        f"{organization} not found in list of valid orgs. You may not have a base url set up for {organization}."
+    )
     # Return None if the organization does not have an associated base URL.
     return None
 
@@ -191,6 +194,7 @@ def get_assets_path() -> Union[str, PathLike]:
 
     return os.path.join(get_root_dir(n=2), "assets")
 
+
 def get_custom_logging_path():
     """
     Retrieves the file path to the custom logging directory located one level up from the current root directory. This
@@ -205,6 +209,7 @@ def get_custom_logging_path():
 
     return os.path.join(get_root_dir(n=1), "custom_logging")
 
+
 def get_output_logs_path():
     """
     Retrieves the file path to the output logs directory located three levels up from the current root directory. This
@@ -218,6 +223,7 @@ def get_output_logs_path():
     """
 
     return get_root_dir(n=3)
+
 
 def validate_output_dir(fp, name, sim_id):
     """
@@ -237,7 +243,7 @@ def validate_output_dir(fp, name, sim_id):
     Raises:
         None
     """
-    
+
     # Initialize a flag to indicate whether overwriting is allowed.
     overwrite = False
 
@@ -245,21 +251,25 @@ def validate_output_dir(fp, name, sim_id):
     if os.path.exists(fp):
         # Print a blank line for better readability in the console output.
         print()
-        
+
         # Prompt the user for input regarding whether to overwrite the existing log.
         decision = check_user_input(name, sim_id)
-        
+
         # If the user decides not to overwrite the existing log.
         if not decision:
             print("Incrementing id...")
             # Construct a new log path by incrementing the simulation ID.
-            new_log_path = os.path.join(get_output_logs_path(), f"logs/{name}-{sim_id+1}/")
+            new_log_path = os.path.join(
+                get_output_logs_path(), f"logs/{name}-{sim_id+1}/"
+            )
             # Recursively validate the new log path with the incremented simulation ID.
-            return validate_output_dir(new_log_path, name, sim_id+1)
+            return validate_output_dir(new_log_path, name, sim_id + 1)
         else:
             # Inform the user that the existing log file will be overwritten.
             print("Overwriting log file is data...")
-            print("The game data will be overwritten when you run `game.save_simulation_data()`")
+            print(
+                "The game data will be overwritten when you run `game.save_simulation_data()`"
+            )
             # Set the overwrite flag to True, indicating that overwriting is allowed.
             overwrite = True
             # Return the overwrite flag, the original file path, and the current simulation ID.
@@ -302,7 +312,9 @@ def check_user_input(name, sim_id):
 
     elif decision == "y":
         # Ask the user for a second confirmation to ensure they really want to overwrite.
-        decision = input("Are you REALLY sure you want to do this (it cannot be undone)??? y or n\n")
+        decision = input(
+            "Are you REALLY sure you want to do this (it cannot be undone)??? y or n\n"
+        )
 
         # If the user confirms again with 'y', return True to indicate overwriting is allowed. Otherwise return False
         # to indicate overwriting is not allowed.
