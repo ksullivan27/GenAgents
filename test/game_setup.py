@@ -2,7 +2,7 @@
 import random  # For generating random numbers
 import os  # For interacting with the operating system
 from itertools import cycle  # For creating an iterator that cycles through an iterable
-from typing import List  # For type hinting with lists
+from typing import override
 
 # Import modules from the text_adventure_games package
 from text_adventure_games import games, things
@@ -36,7 +36,8 @@ GROUP_MAPPING = {
 
 
 class ClassicGame(games.SurvivorGame):
-    """Represents a classic game setup for the SurvivorGame.
+    """
+    Represents a classic game setup for the SurvivorGame.
 
     This class initializes a game with specified parameters, allowing for customization of player characters, actions,
     and game settings.
@@ -63,7 +64,8 @@ class ClassicGame(games.SurvivorGame):
         experiment_name="exp1",
         experiment_id=1,
     ):
-        """Initializes the game with specified parameters.
+        """
+        Initializes the game with specified parameters.
 
         This constructor sets up the game environment, including the starting location, player character, and various
         game settings. It allows for customization of characters, actions, and experiment details.
@@ -93,7 +95,8 @@ class ClassicGame(games.SurvivorGame):
 
 
 class ExplorationGame(games.SurvivorGame):
-    """Represents an exploration game that extends the SurvivorGame.
+    """
+    Represents an exploration game that extends the SurvivorGame.
 
     This class initializes the exploration game with specific parameters and overrides the winning condition to include
     a unique end state check. It allows players to navigate through the game while aiming to achieve specific
@@ -111,7 +114,8 @@ class ExplorationGame(games.SurvivorGame):
     """
 
     def is_won(self):
-        """Determines if the exploration game has been won.
+        """
+        Determines if the exploration game has been won.
 
         This method checks if any character has found the idol, which signifies the end of the game. If a character is
         immune and has found the idol, the game is declared won.
@@ -131,7 +135,8 @@ class ExplorationGame(games.SurvivorGame):
         experiment_name="exp1",
         experiment_id=1,
     ):
-        """Initializes the exploration game with specified parameters.
+        """
+        Initializes the exploration game with specified parameters.
 
         This constructor sets up the game environment, including the starting location, player character, and various
         game settings. It allows for customization of characters, actions, and experiment details, while also defining
@@ -160,8 +165,10 @@ class ExplorationGame(games.SurvivorGame):
             end_state_check="on_action",
         )
 
+    @override
     def is_won(self):
-        """Determines if the exploration game has been won.
+        """
+        Determines if the exploration game has been won.
 
         This method checks each character in the game to see if any have the "immune" property, indicating they have
         found the idol. If such a character is found, the game is declared won, and a message is printed to indicate the
@@ -185,7 +192,8 @@ class ExplorationGame(games.SurvivorGame):
 
 
 class DiscoveryGame(games.SurvivorGame):
-    """Represents a discovery game that extends the SurvivorGame.
+    """
+    Represents a discovery game that extends the SurvivorGame.
 
     This class initializes the discovery game with specific parameters, including the number of rounds and idols. It
     provides mechanisms to determine the game's end state based on the discovery of idols or the reaching of a maximum
@@ -215,7 +223,8 @@ class DiscoveryGame(games.SurvivorGame):
         experiment_name="exp1",
         experiment_id=1,
     ):
-        """Initializes the discovery game with specified parameters.
+        """
+        Initializes the discovery game with specified parameters.
 
         This constructor sets up the game environment, including the starting location, player character, and various
         game settings. It allows for customization of characters, actions, and experiment details, while also
@@ -252,8 +261,10 @@ class DiscoveryGame(games.SurvivorGame):
         # Set the maximum number of rounds for the game.
         self.max_rounds = max_rounds
 
+    @override
     def is_won(self):
-        """Determines if the discovery game has been won.
+        """
+        Determines if the discovery game has been won.
 
         This method checks the current state of the game to see if all idols have been found or if the maximum number of
         rounds has been reached. If either condition is met, the game is declared won, player scores are logged, and a
@@ -271,7 +282,7 @@ class DiscoveryGame(games.SurvivorGame):
         # If all idols have been found, declare the game over and log player scores.
         if remaining_idols == 0:
             print(
-                "All idols have been found! Game is over"
+                "All idols have been found! The game is over."
             )  # Notify that the game has ended.
             self._log_player_scores()  # Log the final scores of the players.
             return True  # Return True to indicate the game has been won.
@@ -291,7 +302,8 @@ class DiscoveryGame(games.SurvivorGame):
         return False
 
     def _get_idols_count(self):
-        """Counts the number of remaining idols in the game.
+        """
+        Counts the number of remaining idols in the game.
 
         This method iterates through all game locations to determine how many idols are still available. It checks each
         location for the presence of an idol and returns the total count of remaining idols.
@@ -313,7 +325,8 @@ class DiscoveryGame(games.SurvivorGame):
         return remaining_idols
 
     def _log_player_scores(self):
-        """Logs the final scores of all players in the game.
+        """
+        Logs the final scores of all players in the game.
 
         This method iterates through each character in the game and formats their final score for logging. It utilizes a
         logging mechanism to record each player's score along with additional contextual information.
@@ -337,7 +350,8 @@ class DiscoveryGame(games.SurvivorGame):
             self.logger.debug(msg=message, extra=extras)
 
     def _get_player_alliance(self, ids_only=False, names_only=False, as_str=False):
-        """Retrieves the player's alliance information.
+        """
+        Retrieves the player's alliance information.
 
         This method provides access to the player's teammates, allowing for different formats of the returned data.
         Depending on the specified flags, it can return only the IDs, only the names, or the full teammate objects.
@@ -362,8 +376,10 @@ class DiscoveryGame(games.SurvivorGame):
         # If neither flag is set, return the full list of teammate objects.
         return self.player.get_teammates()
 
+    @override
     def update_world_info(self):
-        """Updates the world information for the discovery game.
+        """
+        Updates the world information for the discovery game.
 
         This method gathers various parameters related to the current state of the game, including the value of
         remaining idols, contestant locations, partner counts, and remaining rounds. It formats this information into a
@@ -394,7 +410,8 @@ class DiscoveryGame(games.SurvivorGame):
         self.world_info = world_info_prompt.discovery_world_info.format(**params)
 
     def get_basic_game_goal(self):
-        """Retrieves the basic game goal for the discovery game.
+        """
+        Retrieves the basic game goal for the discovery game.
 
         This method constructs a string that outlines the primary objective of the game, incorporating information about
         the player's teammates. It formats this information for display in the game's world information.
@@ -416,7 +433,8 @@ def build_exploration(
     personas_path: str = ".",
     random_placement: bool = False,
 ) -> games.Game:
-    """Builds and initializes an exploration game.
+    """
+    Builds and initializes an exploration game.
 
     This function sets up the game environment by creating locations, adding items, and populating characters based on
     provided parameters. It returns an instance of the ExplorationGame configured with the specified settings.
@@ -513,7 +531,8 @@ def build_discovery(
     personas_path: str = ".",
     random_placement: bool = False,
 ) -> games.Game:
-    """Builds and initializes a discovery game.
+    """
+    Builds and initializes a discovery game.
 
     This function sets up the game environment by creating locations, assigning characters, and configuring game
     parameters based on the provided settings. It returns an instance of the DiscoveryGame configured with the
@@ -534,15 +553,15 @@ def build_discovery(
     """
 
     # Build the initial game locations using the predefined functions.
-    locations = build_game_locations()  # Create basic game locations.
-    locations = build_discovery_locations(
-        locations
-    )  # Enhance locations for the discovery game.
+    # Create basic game locations.
+    locations = build_game_locations()
+    # Enhance locations for the discovery game.
+    locations = build_discovery_locations(locations)
 
     # Initialize an empty list to hold character instances.
     characters = []
     # Set the starting location for the game.
-    start_at = locations.get("camp")  # The camp location is where the game starts.
+    start_at = locations.get("camp")
 
     # Create a cycler for character groups based on the number of characters.
     group_cycler = (
@@ -553,20 +572,20 @@ def build_discovery(
     character_jsons = collect_game_characters(
         personas_path, partition=["Detective", "Explorer"]
     )
-    detective_files = character_jsons.get(
-        "Detective", []
-    )  # Get detective persona files.
-    explorer_files = character_jsons.get("Explorer", [])  # Get explorer persona files.
+    # Get detective persona files.
+    detective_files = character_jsons.get("Detective", [])
+    # Get explorer persona files.
+    explorer_files = character_jsons.get("Explorer", [])
 
     # Ensure both lists have the same length by truncating the longer list.
     # Randomize the ordering of the persona files to ensure variability across experiments.
-    min_length = min(
-        len(detective_files), len(explorer_files)
-    )  # Find the minimum length.
-    detective_files = detective_files[:min_length]  # Truncate detective files.
-    explorer_files = explorer_files[:min_length]  # Truncate explorer files.
-    random.shuffle(detective_files)  # Shuffle detective files for randomness.
-    random.shuffle(explorer_files)  # Shuffle explorer files for randomness.
+    # Find the minimum length and truncate the lists.
+    min_length = min(len(detective_files), len(explorer_files))
+    detective_files = detective_files[:min_length]
+    explorer_files = explorer_files[:min_length]
+    # Shuffle detective and explorer files.
+    random.shuffle(detective_files)
+    random.shuffle(explorer_files)
 
     # Create teams by pairing detective and explorer persona files.
     for teams in zip(detective_files, explorer_files):
@@ -575,26 +594,18 @@ def build_discovery(
         for f in teams:
             # Import the persona from the file and create a character instance.
             persona = Persona.import_persona(f)
-            character = DiscoveryAgent(
-                persona, group=architecture
-            )  # Create a character.
-            team.append(character)  # Add the character to the team.
-            location = locations.get("camp")  # Get the starting location.
-            location.add_character(
-                character
-            )  # Add the character to the starting location.
-            characters.append(
-                character
-            )  # Append the character to the list of characters.
+            character = DiscoveryAgent(persona, group=architecture)
+            team.append(character)
+            location = locations.get("camp")
+            location.add_character(character)
+            characters.append(character)
             print(
                 f"Character {character.name} starts at {location.name} and belongs to Group {architecture}"
-            )  # Print the character's starting information.
+            )
 
         # Set teammates for each character in the team.
         for character in team:
-            character.set_teammates(
-                members=team
-            )  # Assign the team members as teammates.
+            character.set_teammates(members=team)
 
     # Remove the first character from the list to designate them as the player.
     player = characters.pop(0)
@@ -622,7 +633,8 @@ def build_classic(
     personas_path: str = ".",
     random_placement: bool = False,
 ) -> games.Game:
-    """Builds and initializes a classic game.
+    """
+    Builds and initializes a classic game.
 
     This function sets up the game environment by creating locations, assigning characters, and configuring game
     parameters based on the provided settings. It returns an instance of the ClassicGame configured with the specified
@@ -689,11 +701,9 @@ def build_classic(
 
         # Create a character instance with the persona and assigned group.
         character = GenerativeAgent(persona, group_assignments[i])
-        location = location_assignments[
-            i
-        ]  # Get the assigned location for the character.
-        location.add_character(character)  # Add the character to the assigned location.
-        characters.append(character)  # Append the character to the list of characters.
+        location = location_assignments[i]
+        location.add_character(character)
+        characters.append(character)
 
         # Print the character's starting information.
         print(
@@ -717,7 +727,8 @@ def build_classic(
 
 
 def collect_game_characters(personas_path, partition: List[str] = None):
-    """Collects game character files from the specified directory.
+    """
+    Collects game character files from the specified directory.
 
     This function retrieves character files in JSON format from a given directory, optionally filtering them based on
     specified partitions. It returns a list or dictionary of character file paths, depending on whether partitions are
@@ -751,7 +762,7 @@ def collect_game_characters(personas_path, partition: List[str] = None):
             if filename.endswith(".json"):
                 print(
                     "Adding character file: ", filename
-                )  # Log the addition of the character file.
+                )
                 # Construct the full path to the character file.
                 character_path = os.path.join(personas_path, filename)
                 # If partitions are specified, categorize the character files accordingly.
@@ -772,7 +783,8 @@ def collect_game_characters(personas_path, partition: List[str] = None):
 
 
 def build_game_locations():
-    """Builds and initializes the game locations.
+    """
+    Builds and initializes the game locations.
 
     This function creates various locations within the game, sets their properties, and establishes connections between
     them. It also adds items to specific locations and returns a dictionary of the initialized locations for use in the
@@ -814,70 +826,60 @@ def build_game_locations():
     )
 
     # Set properties for the jungle location.
-    jungle.set_property(
-        "has_idol", True
-    )  # Indicates that an idol is present in the jungle.
-    jungle.set_property(
-        "tool_required", True
-    )  # Indicates that a tool is needed to search the jungle.
-    jungle.set_property(
-        "idol_found", False
-    )  # Indicates that the idol has not yet been found.
+    jungle.set_property("has_idol", True)
+    jungle.set_property("tool_required", True)
+    jungle.set_property("idol_found", False)
     jungle_fail_message = "but the vines get in the way and it becomes impossible without the right tool (a machete!)."
-    jungle.set_property(
-        "search_fail", jungle_fail_message
-    )  # Message for failed search attempts.
+    jungle.set_property("search_fail", jungle_fail_message)
     jungle.set_property(
         "found_message",
-        "This idol has already been found by another team! Hurry to find one of the remaining idols!",  # Message if the idol is already found.
+        "This idol has already been found by another team! Hurry to find one of the remaining idols!",
     )
 
     # Establish connections between locations.
-    camp.add_connection("out", beach)  # Connect camp to the beach.
-    beach.add_connection("north", jungle_path)  # Connect beach to the jungle path.
-    beach.add_connection("south", ocean)  # Connect beach to the ocean.
-    beach.add_connection("west", cliffs)  # Connect beach to the cliffs.
-    beach.add_connection("in", camp)  # Connect beach back to the camp.
-    jungle_path.add_connection("south", beach)  # Connect jungle path back to the beach.
-    jungle_path.add_connection("east", well)  # Connect jungle path to the well.
-    jungle_path.add_connection("north", jungle)  # Connect jungle path to the jungle.
-    well.add_connection("west", jungle_path)  # Connect well back to the jungle path.
-    jungle.add_connection(
-        "south", jungle_path
-    )  # Connect jungle back to the jungle path.
-    ocean.add_connection("north", beach)  # Connect ocean back to the beach.
-    cliffs.add_connection("east", beach)  # Connect cliffs back to the beach.
+    camp.add_connection("out", beach)
+    beach.add_connection("north", jungle_path)
+    beach.add_connection("south", ocean)
+    beach.add_connection("west", cliffs)
+    beach.add_connection("in", camp)
+    jungle_path.add_connection("south", beach)
+    jungle_path.add_connection("east", well)
+    jungle_path.add_connection("north", jungle)
+    well.add_connection("west", jungle_path)
+    jungle.add_connection("south", jungle_path)
+    ocean.add_connection("north", beach)
+    cliffs.add_connection("east", beach)
 
     # Create and add gettable items to specific locations.
     fishing_pole = things.Item(
         "pole",
         "a fishing pole",
-        "A SIMPLE FISHING POLE.",  # Description of the fishing pole item.
+        "A SIMPLE FISHING POLE.",
     )
-    ocean.add_item(fishing_pole)  # Add the fishing pole to the ocean location.
-    ocean.set_property("has_fish", True)  # Indicate that there are fish in the ocean.
+    ocean.add_item(fishing_pole)
+    ocean.set_property("has_fish", True)
 
     # Create and add machete items to various locations.
     machete1 = things.Item(
         "machete1",
         "a sharp machete",
-        "A SHARP MACHETE USED FOR CUTTING VINES.",  # Description of the machete item.
+        "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    camp.add_item(machete1)  # Add the machete to the camp location.
+    camp.add_item(machete1)
 
     machete2 = things.Item(
         "machete2",
         "a sharp machete",
-        "A SHARP MACHETE USED FOR CUTTING VINES.",  # Description of the machete item.
+        "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    well.add_item(machete2)  # Add the machete to the well location.
+    well.add_item(machete2)
 
     machete3 = things.Item(
         "machete3",
         "a sharp machete",
-        "A SHARP MACHETE USED FOR CUTTING VINES.",  # Description of the machete item.
+        "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    beach.add_item(machete3)  # Add the machete to the beach location.
+    beach.add_item(machete3)
 
     # Return a dictionary of all initialized locations, ensuring the jungle is not a starting point.
     return {
@@ -891,7 +893,8 @@ def build_game_locations():
 
 
 def build_discovery_locations(base_locations):
-    """Builds additional discovery locations and their properties.
+    """
+    Builds additional discovery locations and their properties.
 
     This function enhances the base locations by adding new locations, establishing connections between them, and
     setting properties for items and clues. It returns the updated dictionary of locations, including newly created
@@ -915,90 +918,62 @@ def build_discovery_locations(base_locations):
         "A stunning waterfall creates a veil of mist.",
     )
     # Set properties for the waterfall location.
-    waterfall.set_property(
-        "has_idol", True
-    )  # Indicates that an idol is present at the waterfall.
-    waterfall.set_property(
-        "tool_required", True
-    )  # Indicates that a tool is needed to search the waterfall.
-    waterfall.set_property(
-        "idol_found", False
-    )  # Indicates that the idol has not yet been found.
+    waterfall.set_property("has_idol", True)
+    waterfall.set_property("tool_required", True)
+    waterfall.set_property("idol_found", False)
     waterfall.set_property(
         "found_message",
         "This idol has already been found by another team! Hurry to find one of the remaining idols!",
-    )  # Message if the idol is already found.
+    )
     waterfall_fail_message = "but the rocks are too slippery and it becomes impossible without the right tool (a sturdy stick!)."
-    waterfall.set_property(
-        "search_fail", waterfall_fail_message
-    )  # Message for failed search attempts.
-    waterfall.add_connection(
-        "west", base_locations.get("well")
-    )  # Connect waterfall to the well.
-    base_locations.get("well").add_connection(
-        "east", waterfall
-    )  # Connect well back to the waterfall.
+    waterfall.set_property("search_fail", waterfall_fail_message)
+    waterfall.add_connection("west", base_locations.get("well"))
+    base_locations.get("well").add_connection("east", waterfall)
 
     # Create a new location for the rocky shore with a description.
     rocky_shores = things.Location(
         "rocky shore", "Slippery tidepools with rocks beaten by waves."
     )
     # Set properties for the rocky shores location.
-    rocky_shores.set_property(
-        "has_idol", True
-    )  # Indicates that an idol is present at the rocky shores.
-    rocky_shores.set_property(
-        "tool_required", False
-    )  # Indicates that no tool is needed to search the rocky shores.
-    rocky_shores.set_property(
-        "idol_found", False
-    )  # Indicates that the idol has not yet been found.
+    rocky_shores.set_property("has_idol", True)
+    rocky_shores.set_property("tool_required", False)
+    rocky_shores.set_property("idol_found", False)
     rocky_shores.set_property(
         "found_message",
         "This idol has already been found by another team! Hurry to find one of the remaining idols!",
-    )  # Message if the idol is already found.
+    )
     rocky_shores.set_property(
         "search_fail",
         "but the tide is too high and dangerous to wade across the rocks. It will subside next round and you should try again then! ",
-    )  # Message for failed search attempts.
-    rocky_shores.add_connection(
-        "north", base_locations.get("camp")
-    )  # Connect rocky shores to the camp.
-    base_locations.get("camp").add_connection(
-        "south", rocky_shores
-    )  # Connect camp back to the rocky shores.
+    )
+    rocky_shores.add_connection("north", base_locations.get("camp"))
+    base_locations.get("camp").add_connection("south", rocky_shores)
 
     # Create a new location for the lazy river with a description.
     lazy_river = things.Location("lazy river", "the banks of a murky, winding river")
-    lazy_river.add_connection(
-        "south", base_locations.get("well")
-    )  # Connect lazy river to the well.
-    base_locations.get("well").add_connection(
-        "north", lazy_river
-    )  # Connect well back to the lazy river.
+    lazy_river.add_connection("south", base_locations.get("well"))
+    base_locations.get("well").add_connection("north", lazy_river)
 
     # Create and add gettable items to specific locations.
     stick1 = things.Item(
         "stick", "a long stick", "A sturdy stick to keep balanced on slippery rocks."
     )
-    base_locations.get("well").add_item(stick1)  # Add the stick to the well location.
+    base_locations.get("well").add_item(stick1)
 
     stick2 = things.Item(
         "stick", "a long stick", "A sturdy stick to keep balanced on slippery rocks."
     )
-    base_locations.get("beach").add_item(stick2)  # Add the stick to the beach location.
+    base_locations.get("beach").add_item(stick2)
 
     stick3 = things.Item(
         "stick", "a long stick", "A sturdy stick to keep balanced on slippery rocks."
     )
-    base_locations.get("ocean").add_item(stick3)  # Add the stick to the ocean location.
+    base_locations.get("ocean").add_item(stick3)
 
     stick4 = things.Item(
         "stick", "a long stick", "A sturdy stick to keep balanced on slippery rocks."
     )
-    base_locations.get("jungle_path").add_item(
-        stick4
-    )  # Add the stick to the jungle path location.
+    base_locations.get("jungle_path").add_item(stick4)
 
     # Create and add machete items to various locations.
     machete4 = things.Item(
@@ -1006,18 +981,14 @@ def build_discovery_locations(base_locations):
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    base_locations.get("ocean").add_item(
-        machete4
-    )  # Add the machete to the ocean location.
+    base_locations.get("ocean").add_item(machete4)
 
     machete5 = things.Item(
         "machete3",
         "a sharp machete",
         "A SHARP MACHETE USED FOR CUTTING VINES.",
     )
-    base_locations.get("jungle_path").add_item(
-        machete5
-    )  # Add the machete to the jungle path location.
+    base_locations.get("jungle_path").add_item(machete5)
 
     # Create clues that provide hints about idol locations.
     clue1 = things.Item(
@@ -1097,7 +1068,8 @@ def build_mini_discovery(
     personas_path: str = ".",
     random_placement: bool = False,
 ) -> games.Game:
-    """Builds and initializes a mini discovery game.
+    """
+    Builds and initializes a mini discovery game.
 
     This function sets up a simplified game environment by creating a location, adding items and clues, and configuring
     game parameters based on the provided settings. It returns an instance of the DiscoveryGame configured with the
@@ -1119,16 +1091,16 @@ def build_mini_discovery(
     cliffs = things.Location(
         "Cliffs",
         """the front of some steep cliffs.
-            Climb them carefully so you don't fall.""",  # Description of the cliffs location.
+            Climb them carefully so you don't fall.""",
     )
 
     # Create a clue item that provides information about the idol's location.
     clue = things.Item(
         "idol clue",
         "a clue to the idol",
-        "A CLUE THAT SAYS THE IDOL CAN BE FOUND IN THE JUNGLE WITH A MACHETE",  # Description of the clue.
+        "A CLUE THAT SAYS THE IDOL CAN BE FOUND IN THE JUNGLE WITH A MACHETE",
     )
-    cliffs.add_item(clue)  # Add the clue to the cliffs location.
+    cliffs.add_item(clue)
 
     # Construct the message content for the clue.
     clue1_message = "".join(
@@ -1138,15 +1110,15 @@ def build_mini_discovery(
             "'If you pick up and hold this clue while searching, you'll have a better chance of discovering the idol!'",
         ]
     )
-    clue.set_property("clue_content", clue1_message)  # Set the clue content property.
+    clue.set_property("clue_content", clue1_message)
 
     # Set properties for the cliffs location.
     cliffs.set_property(
         "has_idol", True
-    )  # Indicates that an idol is present at the cliffs.
+    )
     cliffs.set_property(
         "tool_required", True
-    )  # Indicates that a tool is needed to search the cliffs.
+    )
     cliffs_message = "but the rocks are too slippery and it becomes impossible without the right tool (a sturdy stick!)."
     cliffs.set_property(
         "search_fail", cliffs_message
@@ -1156,9 +1128,9 @@ def build_mini_discovery(
     stick4 = things.Item(
         "stick",
         "a long stick",
-        "A sturdy stick to keep balanced on slippery rocks.",  # Description of the stick item.
+        "A sturdy stick to keep balanced on slippery rocks.",
     )
-    cliffs.add_item(stick4)  # Add the stick to the cliffs location.
+    cliffs.add_item(stick4)
 
     # Initialize an empty list to hold character instances.
     characters = []

@@ -54,7 +54,8 @@ def perceive_location(game: "Game", character: "Character"):
         None
     """
 
-    # Collect the current perceptions of the character's location from the game.
+    # Collect the current perceptions of the character's location from the game (includes exits, items, other
+    # characters, and agent's inventory).
     location_description = collect_perceptions(game)
 
     # Parse the collected location description into structured observations.
@@ -99,7 +100,7 @@ def add_new_observations(game: "Game", character: "Character", new_percepts: Dic
         for statement in observations:
             # Summarize and score the action based on the statement and the character's context.
             action_statement, action_importance, action_keywords = (
-                game.parser.summarise_and_score_action(
+                game.parser.summarize_and_score_action(
                     statement, character, command=command
                 )
             )

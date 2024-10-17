@@ -11,6 +11,8 @@ Description: defines how agents store interpersonal impressions and theory-of-mi
              However, if a player comes across a new target, all relevant memories to the target will be pulled.
 
 """
+# Importing the inspect module, which provides useful functions to get information about live objects
+import inspect
 
 from collections import (
     defaultdict,
@@ -36,6 +38,10 @@ from text_adventure_games.agent.agent_cognition import (
 from text_adventure_games.utils.general import (
     get_logger_extras,
 )  # Import utility for logging extras
+
+# Import the get_models_config function from the consts module in the utils package.
+# This function is used to retrieve the configuration for different models used in the game.
+from text_adventure_games.utils.consts import get_models_config
 
 if TYPE_CHECKING:  # Check if type checking is enabled
     from text_adventure_games.games import Game  # Import Game class for type hints
@@ -65,7 +71,7 @@ class Impressions:
         id (int): The unique identifier of the agent.
     """
 
-    def __init__(self, name, id):
+    def __init__(self, character: "Character"):
         """
         Initializes an Impressions object to manage character impressions.
         This constructor sets up the necessary attributes for storing impressions and configuring the GPT handler.
@@ -78,18 +84,14 @@ class Impressions:
                                     "creation": the total ticks at time of creation.
 
         Args:
-            name (str): The name of the agent.
-            id (int): The unique identifier of the agent.
+            character (Character): The character associated with this impressions object.
         """
 
         # Initialize a dictionary to store impressions, with default values as empty dictionaries
         self.impressions = defaultdict(dict)
 
-        # Set the name of the agent
-        self.name = name
-
-        # Set the unique identifier for the agent
-        self.id = id
+        # Set the character associated with this impressions object
+        self.character = character
 
         # Initialize the last target character to None
         self.last_target = None
@@ -115,7 +117,9 @@ class Impressions:
         # Define the parameters for the GPT model configuration
         model_params = {
             "api_key_org": "Helicone",  # Organization API key for authentication
-            "model": "gpt-4",  # Specify the GPT model version to use
+            "model": get_models_config()["impressions"][
+                "model"
+            ],  # Specify the GPT model version to use
             "max_tokens": IMPRESSION_MAX_OUTPUT,  # Maximum number of tokens for the output
             "temperature": 1,  # Sampling temperature for randomness in output
             "top_p": 1,  # Nucleus sampling parameter
@@ -125,14 +129,14 @@ class Impressions:
         # Return an instance of the GptCallHandler initialized with the specified parameters
         return GptCallHandler(**model_params)
 
-    def _log_impression(self, game, character, message):
+    def _log_impression(self, game, target, message):
         """
-        Logs an impression message for a specific character in the game.
+        Logs an impression message for a specific character about a target character in the game.
         This method retrieves additional logging information and sends a debug log with the impression details.
 
         Args:
             game (Game): The current game object where the impression is being logged.
-            character (Character): The character associated with the impression being logged.
+            target (Character): The character the impression is being made about.
             message (str): The impression message to be logged.
 
         Returns:
@@ -140,10 +144,12 @@ class Impressions:
         """
 
         # Retrieve additional logging information specific to the game and character
-        extras = get_logger_extras(game, character)
+        extras = get_logger_extras(game, self.character, include_gpt_call_id=True)
 
-        # Set the type of log entry to "Impression"
-        extras["type"] = "Impression"
+        extras["type"] = "Impressions"
+
+        # Add the target character to the extras dictionary
+        extras["target"] = f"{target.name}"
 
         # Log the impression message at the debug level, including the extra information
         game.logger.debug(msg=message, extra=extras)
@@ -196,7 +202,7 @@ class Impressions:
         # Iterate through each character in the provided character list
         for char in character_list:
             # Skip the current character to avoid self-impression
-            if char.id == self.id:
+            if char is self.character:
                 continue
 
             # Create a string that introduces the character's impression
@@ -214,7 +220,7 @@ class Impressions:
         return char_impressions
 
     def update_impression(
-        self, game: "Game", character: "Character", target: "Character"
+        self, game: "Game", target: "Character"
     ) -> None:
         """
         Conditionally updates the impression of a target character based on the game's state.
@@ -223,7 +229,6 @@ class Impressions:
 
         Args:
             game (Game): The current game object containing game state information.
-            character (Character): The agent making the impression update.
             target (Character): The target character whose impression is being updated.
 
         Returns:
@@ -251,10 +256,10 @@ class Impressions:
         # Ensure that an impression is not made until at least half a round has passed
         if should_update and total_ticks > game.max_ticks_per_round / 2:
             # Trigger the process to set a new impression for the target character
-            self.set_impression(game, character, target)
+            self.set_impression(game, target)
 
     def set_impression(
-        self, game: "Game", character: "Character", target: "Character"
+        self, game: "Game", target: "Character"
     ) -> None:
         """
         Creates and logs an impression of a target character based on the current game context.
@@ -263,7 +268,6 @@ class Impressions:
 
         Args:
             game (Game): The current game object providing context for the impression.
-            character (Character): The agent creating the impression.
             target (Character): The target character for whom the impression is being created.
 
         Returns:
@@ -274,16 +278,16 @@ class Impressions:
         self.last_target = target
 
         # Generate the system and user prompts for the GPT model based on the game context and characters
-        system, user = self.build_impression_prompts(game, character, target)
+        system, user = self.build_impression_prompts(game, target)
 
         # Retrieve the impression from the GPT model using the generated prompts
-        impression = self.gpt_generate_impression(system, user)
+        impression = self.gpt_generate_impression(system, user, target)
 
         # Log the generated impression for debugging purposes (commented out)
-        # print(f"{character.name} impression of {target.name}: {impression}")
+        # print(f"{self.character.name} impression of {target.name}: {impression}")
 
         # Log the impression in the game's logger for record-keeping
-        self._log_impression(game, character, impression)
+        self._log_impression(game, target, impression)
 
         # Update the internal impressions dictionary with the new impression details
         self.impressions.update(
@@ -315,7 +319,7 @@ class Impressions:
         """
 
         # Generate an impression using the GPT handler with the provided system and user prompts
-        impression = self.gpt_handler.generate(system=system_prompt, user=user_prompt)
+        impression = self.gpt_handler.generate(system=system_prompt, user=user_prompt, character=self.character)
 
         # Check if the result is a tuple, indicating a potential error due to exceeding token limits
         if isinstance(impression, tuple):
@@ -329,19 +333,18 @@ class Impressions:
             self.offset_pad += 2 * self.offset_pad
 
             # Trigger a re-evaluation of the impression for the last target character
-            return self.set_impression(self.game, self.character, self.last_target)
+            return self.set_impression(self.game, self.last_target)
 
         # Return the generated impression if no errors occurred
         return impression
 
-    def build_impression_prompts(self, game, character, target):
+    def build_impression_prompts(self, game, target):
         """
         Constructs the system and user prompts required for generating an impression of a target character.
         This method combines contextual information from the game and characters to create prompts for the GPT model.
 
         Args:
             game: The current game object providing context for the impression.
-            character: The agent creating the impression.
             target: The target character for whom the impression is being generated.
 
         Returns:
@@ -350,21 +353,21 @@ class Impressions:
 
         # Generate the system prompt and count the number of tokens used in the system prompt
         system_prompt, sys_token_count = self.build_system_prompt(
-            game, character, target.name
+            game, target.name
         )
 
         # Calculate the total number of tokens consumed by adding the system token count and the current token offset
         consumed_tokens = sys_token_count + self.token_offset
 
-        # Create the user prompt using the game context, character, target, and the total consumed tokens
+        # Create the user prompt using the game context, target, and the total consumed tokens
         user_prompt = self.build_user_message(
-            game, character, target, consumed_tokens=consumed_tokens
+            game, target, consumed_tokens=consumed_tokens
         )
 
         # Return both the system prompt and user prompt for further processing
         return system_prompt, user_prompt
 
-    def build_system_prompt(self, game, character, target_name):
+    def build_system_prompt(self, game, target_name):
         """
         Constructs the system prompt for the GPT model using information about the character and the target.
         This method combines standard character information with a specific prompt format to create a comprehensive
@@ -372,7 +375,6 @@ class Impressions:
 
         Args:
             game: The current game object providing context for the prompt.
-            character: The agent whose information is being used to build the prompt.
             target_name: The name of the target character for whom the impression is being generated.
 
         Returns:
@@ -380,7 +382,7 @@ class Impressions:
         """
 
         # Retrieve the standard information of the character, excluding perceptions
-        system_prompt = character.get_standard_info(game, include_perceptions=False)
+        system_prompt = self.character.get_standard_info(game, include_perceptions=False)
 
         # Append the formatted prompt for generating impressions, including the target character's name
         system_prompt += ip.gpt_impressions_prompt.format(target_name=target_name)
@@ -393,7 +395,7 @@ class Impressions:
         # Return the constructed system prompt along with its token count
         return system_prompt, sys_tkn_count
 
-    def build_user_message(self, game, character, target, consumed_tokens=0) -> str:
+    def build_user_message(self, game, target, consumed_tokens=0) -> str:
         """
         Constructs a user message for the GPT model that includes the target character's name and relevant memories.
         This method gathers the agent's current impression of the target and any pertinent memories to create a
@@ -401,7 +403,6 @@ class Impressions:
 
         Args:
             game: The current game object providing context for the message.
-            character: The agent creating the message.
             target: The target character for whom the message is being constructed.
             consumed_tokens (int, optional): The number of tokens already consumed in the prompt. Defaults to 0.
 
@@ -427,8 +428,8 @@ class Impressions:
         if target_impression:
             # If an impression exists, retrieve memory nodes from the last round that mention the target character's
             # name
-            memory_ids = character.memory.get_observations_by_round(game.round)
-            nodes = [character.memory.get_observation(m_id) for m_id in memory_ids]
+            memory_ids = self.character.memory.get_observations_by_round(game.round)
+            nodes = [self.character.memory.get_observation(m_id) for m_id in memory_ids]
 
             # Filter the nodes to create a context list based on the target character's keywords
             context_list = [
@@ -441,11 +442,11 @@ class Impressions:
                 target_impression
             )  # Count tokens in the target impression
         else:
-            # If no impression exists, retrieve the 10 most relevant memories about the target character
+            # If no impression exists, retrieve the most relevant memories about the target character
             # TODO: Consider improving this query for better relevance
             context_list = retrieve.retrieve(
                 game,
-                character,
+                self.character,
                 n=-1,
                 query=f"I want to remember everything I know about {target.name}",
             )
@@ -458,7 +459,7 @@ class Impressions:
             consumed_tokens,
             target_impression_tkns,
             always_included_count,
-            self.gpt_handler.max_tokens,  # Max output tokens set by user
+            self.gpt_handler.max_output_tokens,  # Max output tokens set by user
         )
 
         # Limit the context list to fit within the available token count

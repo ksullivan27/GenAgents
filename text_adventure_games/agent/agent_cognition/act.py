@@ -24,7 +24,8 @@ from text_adventure_games.gpt.gpt_helpers import (
     context_list_to_string,
     GptCallHandler,
 )
-from text_adventure_games.utils.general import enumerate_dict_options, get_logger_extras
+from text_adventure_games.utils.consts import get_models_config
+from text_adventure_games.utils.general import enumerate_dict_options
 from .retrieve import retrieve
 from text_adventure_games.assets.prompts import act_prompts as ap
 
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
 
 class Act:
     """
-    Manages the actions of a character within a game environment.
     It facilitates the interaction between the character and the game by generating actions based on prompts.
 
     Args:
@@ -50,6 +50,16 @@ class Act:
         build_user_message: Forms the user message based on the game state and character context.
         get_user_token_limits: Calculates the token limits for impressions and memories based on available tokens.
     """
+
+    gpt_handler = None
+    model_params = {
+        "api_key_org": "Helicone",
+        "model": get_models_config()["act"]["model"],
+        "max_tokens": 100,
+        "temperature": 1,
+        "top_p": 1,
+        "max_retries": 5,
+    }
 
     def __init__(self, game, character):
         """
@@ -67,8 +77,9 @@ class Act:
         # Assign the provided character instance to the instance variable for later use.
         self.character = character
 
-        # Initialize the GPT handler by calling the setup method, which configures the model parameters.
-        self.gpt_handler = self._set_up_gpt()
+        # Initialize the GPT handler if it hasn't been set up yet
+        if Act.gpt_handler is None:
+            Act.gpt_handler = GptCallHandler(**Act.model_params)
 
         # Initialize the token offset to zero, which will be used to manage token limits during action generation.
         self.token_offset = 0
@@ -76,34 +87,9 @@ class Act:
         # Set the offset padding to 5, which will be used to adjust token calculations.
         self.offset_pad = 5
 
-    def _set_up_gpt(self):
-        """
-        Configures and initializes the GPT handler with the necessary model parameters.
-        This method sets up the API key, model type, and various settings to control the behavior of the GPT model.
-
-        Returns:
-            GptCallHandler: An instance of the GptCallHandler configured with the specified model parameters.
-        """
-
-        model_params = {
-            "api_key_org": "Helicone",
-            "model": "gpt-4",
-            "max_tokens": 100,
-            "temperature": 1,
-            "top_p": 1,
-            "max_retries": 5,
-        }
-
-        return GptCallHandler(**model_params)
-
-    # def _log_action(self, game, character, message):
-    #     extras = get_logger_extras(game, character)
-    #     extras["type"] = "Act"
-    #     game.logger.debug(msg=message, extra=extras)
-
     def act(self):
         """
-        Generates and executes an action for the character based on the current game state.
+        Generates an action for the character based on the current game state.
         This method constructs the necessary prompts, retrieves the action to take, and outputs the chosen action.
 
         Returns:
@@ -144,7 +130,7 @@ class Act:
         # client = set_up_openai_client("Helicone")
 
         # Generate a response from the GPT handler using the provided system and user prompts.
-        response = self.gpt_handler.generate(system=system_prompt, user=user_prompt)
+        response = self.gpt_handler.generate(system=system_prompt, user=user_prompt, character=self.character)
 
         # Check if the response is a tuple, indicating a potential error related to token limits.
         if isinstance(response, tuple):
@@ -265,7 +251,7 @@ class Act:
         # Determine the available tokens for the user based on the model's limits and consumed tokens.
         user_available_tokens = get_token_remainder(
             self.gpt_handler.model_context_limit,
-            self.gpt_handler.max_tokens,
+            self.gpt_handler.max_output_tokens,
             consumed_tokens,
             always_included_tokens,
         )

@@ -7,6 +7,8 @@ import json
 # Import the logging module to enable logging functionality in the application.
 import logging
 
+from typing import override
+
 # Define a set of built-in attributes that are commonly found in log records.
 # This set can be used to filter or process log records effectively.
 LOG_RECORD_BUILTIN_ATTRS = {
@@ -159,3 +161,100 @@ class CustomJSONFormatter(logging.Formatter):
 
         # Return the constructed message dictionary containing all relevant log information.
         return message
+
+
+# class CustomGPTCallJSONFormatter(CustomJSONFormatter):
+#     """
+#     CustomGPTCallJSONFormatter is a specialized formatter designed to format log records related to GPT calls. It extends
+#     the CustomJSONFormatter and adds specific fields to capture details related to GPT calls, such as the conversation
+#     history and the response received.
+
+#     Args:
+#         fmt_keys (dict[str, str], optional): A dictionary mapping custom keys to log record attributes. If None,
+#         defaults to an empty dictionary.
+
+#     Methods:
+#         format(record): Formats the log record into a JSON string.
+#         _prepare_log_dict(record): Prepares a dictionary representation of the log record, including always fields and
+#         custom fields, which is then used by format(record) to make the record JSON string.
+
+#     Returns:
+    
+#         str: A JSON string representation of the log record.
+
+#     Raises:
+#         TypeError: If fmt_keys is not a dictionary or None.
+#     """
+
+#     def __init__(
+#         self,
+#         *,
+#         fmt_keys: dict[str, str] | None = None,
+#     ):
+#         """
+#         Initializes a CustomGPTCallJSONFormatter instance, allowing for the specification of custom keys for formatting
+#         log records related to GPT calls. If no custom keys are provided, it defaults to an empty dictionary.
+
+#         Args:
+#             fmt_keys (dict[str, str], optional): A dictionary mapping custom keys to log record attributes for renaming
+#             purposes. Defaults to None, which initializes fmt_keys as an empty dictionary.
+#         """
+
+#         # Call the initializer of the parent class to ensure proper initialization of the inherited attributes and
+#         # methods.
+#         super().__init__(fmt_keys=fmt_keys)
+
+#     @override
+#     def _prepare_log_dict(self, record: logging.LogRecord):
+#         """
+#         Prepares a dictionary representation of a log record related to GPT calls, including essential fields and any
+#         additional custom fields specified. This method extracts relevant information from the log record and formats it
+#         into a structured dictionary for further processing.
+
+#         Args:
+#             record (logging.LogRecord): The log record to be processed.
+
+#         Returns:
+#             dict: A dictionary containing the formatted log information related to GPT calls, including the conversation
+#             history, the response received, and any additional fields.
+
+#         Raises:
+#             KeyError: If a specified field in fmt_keys does not exist in the log record.
+#         """
+
+#         # Retrieve the base log dictionary from the parent class.
+#         message = super()._prepare_log_dict(record)
+
+#         # Extract and format the messages from the log record.
+#         messages = message.pop("messages")
+#         messages_list = []
+#         for message in messages:
+#             messages_list.append(
+#                 f"{message['role'].title()}:\n{message['content']}"  # Format each message with its role.
+#             )
+#         messages = "\n\n".join(messages_list)  # Join formatted messages with double newlines.
+
+#         # Extract response details from the log record.
+#         response = message.pop("response")
+#         choices = response["choices"][0]  # Get the first choice from the response.
+
+#         # Add relevant response information to the message dictionary.
+#         message["id"] = response["id"]
+#         message["model"] = response["model"]
+#         message["messages"] = messages
+#         message["response"] = choices["message"]["content"]
+#         message["finish_reason"] = choices["finish_reason"]
+
+#         # Extract and add token usage information to the message dictionary.
+#         usage = response["usage"]
+#         message["prompt_tokens"] = usage["prompt_tokens"]
+#         message["completion_tokens"] = usage["completion_tokens"]
+#         message["total_tokens"] = usage["total_tokens"]
+
+#         # Add specific fields related to GPT calls to the message dictionary.
+#         message["gpt_call_id"] = record.gpt_call_id  # Add the GPT call ID.
+#         message["gpt_call_history"] = record.gpt_call_history  # Add the GPT call history.
+#         message["gpt_call_response"] = record.gpt_call_response  # Add the GPT call response.
+
+#         # Return the constructed message dictionary containing all relevant log information related to GPT calls.
+#         return message

@@ -20,6 +20,9 @@ import json
 # Importing string module for string manipulation and constants.
 import string
 
+# Importing the inspect module, which provides useful functions to get information about live objects
+import inspect
+
 # Importing numpy for numerical operations and array handling.
 import numpy as np
 
@@ -31,6 +34,9 @@ from openai import OpenAI
 
 # Importing OpenAIEngine from kani.engines.openai for engine-specific operations.
 from kani.engines.openai import OpenAIEngine
+
+# Importing GptCallHandler from gpt.gpt_helpers for handling GPT call counts.
+from GenAgents.text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 # Local imports from the current package, specifically constants used in the module.
 from . import consts
@@ -71,7 +77,7 @@ def set_up_openai_client(org="Penn", **kwargs):
     return OpenAI(**params)
 
 
-def set_up_kani_engine(org="Penn", model="gpt-4", **kwargs):
+def set_up_kani_engine(org="Penn", model="gpt-4o-mini", **kwargs):
     """
     Sets up and returns an instance of the Kani engine configured with the specified organization and model. This
     function retrieves the API key for the organization and initializes the OpenAIEngine with the provided model and
@@ -93,7 +99,7 @@ def set_up_kani_engine(org="Penn", model="gpt-4", **kwargs):
     return OpenAIEngine(key, model=model, **kwargs)
 
 
-def get_logger_extras(game, character):
+def get_logger_extras(game, character=None, include_gpt_call_id=False, stack_level=1):
     """
     Retrieves additional logging information related to the current game state and character attributes. This function
     constructs a dictionary containing relevant details about the character and the game, which can be used for logging
@@ -101,7 +107,10 @@ def get_logger_extras(game, character):
 
     Args:
         game (Game): The current game instance containing game-related information.
-        character (Character): The character instance whose attributes are to be logged.
+        character (Character, optional): The character instance whose attributes are to be logged. Defaults to None .
+        include_gpt_call_id (bool, optional): A flag indicating whether to include the GPT call ID in the logging
+        information. Defaults to False.
+        stack_level (int, optional): The level of the stack to inspect for the calling module. Defaults to 1.
 
     Returns:
         dict: A dictionary containing logging extras, including character details and game state information.
@@ -110,7 +119,21 @@ def get_logger_extras(game, character):
         AttributeError: If the character does not have the expected attributes.
     """
 
+    # Get the filename of the module that called this function
+    module_name = inspect.stack()[stack_level].filename
+    # Remove the .py extension
+    module_name = os.path.splitext(module_name)[0]
+    # Capitalize name
+    module_name = module_name.title()
+    
+    if include_gpt_call_id:
+        gpt_call_id = GptCallHandler.get_calls_count()
+    else:
+        gpt_call_id = "N/A"
+
     return {
+        "module": module_name,
+        "gpt_call_id": gpt_call_id,
         "character_name": character.name if character else "none",
         "character_id": character.id if character else "none",
         "character_group": character.group if character else "none",
@@ -373,6 +396,8 @@ def parse_location_description(text):
     if len(by_description_type) >= 1:
         # Extract the description type and location from the first line, stripping any whitespace.
         desc_type, loc = map(lambda x: x.strip(), by_description_type[0].split(":"))
+        # strip leading/trailing whitespaces around each piece
+        desc_type, loc = desc_type.strip(), loc.strip()
         # Store the location in the observations dictionary under the description type.
         new_observations[desc_type] = [loc]
 
@@ -385,10 +410,18 @@ def parse_location_description(text):
                     desc_type, player, observed = map(
                         lambda x: x.strip(), description.split(":")
                     )
+                    # strip leading/trailing whitespaces around each piece
+                    desc_type, player, observed = (
+                        desc_type.strip(),
+                        player.strip(),
+                        observed.strip()
+                    )
                 except ValueError:
                     # If unpacking fails due to insufficient values, handle the error.
                     # Assume the first part is the description type and indicate no observations.
                     desc_type = description.split(":")[0]
+                    # strip leading/trailing whitespaces
+                    desc_type = desc_type.strip()
                     new_observations[desc_type] = [f"No {desc_type}"]
                     continue  # Skip to the next line.
 
@@ -396,12 +429,12 @@ def parse_location_description(text):
                 if "(" in observed:
                     # Split the observed values by semicolon and format them with the player name.
                     new_observations[desc_type] = [
-                        f"{player} {obs}" for obs in observed.split(";") if obs
+                        f"{player} {obs.strip()}" for obs in observed.split(";") if obs
                     ]
                 else:
                     # Split the observed values by comma and format them with the player name.
                     new_observations[desc_type] = [
-                        f"{player} {obs}" for obs in observed.split(",") if obs
+                        f"{player} {obs.strip()}" for obs in observed.split(",") if obs
                     ]
 
     # Return the dictionary containing the categorized observations.
@@ -444,14 +477,12 @@ def find_difference_in_dict_lists(dict1, dict2):
         for description2 in value2:
             # Check if the current key exists in the first dictionary.
             if key in dict1:
-                # If the key exists, check if the current description matches any in the list from dict1.
-                if any([description2 == desc1 for desc1 in dict1[key]]):
-                    continue  # If a match is found, skip to the next description.
-                # If the value was not matched by anything in dict1[key], add it to the differences.
-                else:
+                # If the key exists, check if the current description doesn't match against all in the list from dict1.
+                if all(description2 != desc1 for desc1 in dict1[key]):
                     diff[key] = [description2]
             else:
-                # If the key doesn't exist in the first dictionary, add the key and its value from dict2 to the differences.
+                # If the key doesn't exist in the first dictionary, add the key and its value from dict2 to the
+                # differences.
                 diff[key] = [value2]
 
     # Return the dictionary containing the differences between the two dictionaries.
