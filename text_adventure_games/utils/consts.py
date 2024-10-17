@@ -17,6 +17,12 @@ from os import PathLike
 # Importing Union from typing to enable type hinting for variables that can hold multiple types.
 from typing import Union
 
+# Import the logging module to enable logging functionality within this script
+import logging
+
+# Set up the logger at the module level
+logger = logging.getLogger("utilities")
+
 
 def get_root_dir(n=2) -> Union[str, PathLike]:
     """
@@ -140,6 +146,51 @@ def get_openai_api_key(organization):
     return None
 
 
+def get_models_config():
+    """
+    Retrieves the models configuration from the configuration file. This function
+    checks the configuration for the 'models' section and returns it.
+
+    Returns:
+        dict: A dictionary containing the models configuration, or None if not found.
+
+    Raises:
+        None
+    """
+
+    # Retrieve the configuration variables from the configuration file.
+    config_vars = get_config_file()
+
+    # Get the 'models' section from the configuration.
+    models_config = config_vars.get("models", None)
+
+    if models_config is None:
+        # Return None if the file doesn't include "models".
+        print("No 'models' configuration found in the config file.")
+        return None
+
+    # Ensure that all required model types are present
+    required_models = [
+        "act",
+        "goals",
+        "impressions",
+        "reflect",
+        "retrieve",
+        "dialogue",
+        "vote",
+    ]
+    # Set up a default value if any are missing.
+    default_model = "gpt-4o-mini"
+    for model in required_models:
+        if model not in models_config:
+            logger.warning(
+                f"'{model}' model configuration is missing. Defaulting to {default_model}."
+            )
+            models_config[model] = {"model": default_model}  # Set a default value
+
+    return models_config
+
+
 def get_helicone_base_path(organization="Helicone"):
     """
     Retrieves the base URL for the Helicone organization from the configuration file. This function checks if the
@@ -244,9 +295,6 @@ def validate_output_dir(fp, name, sim_id):
         None
     """
 
-    # Initialize a flag to indicate whether overwriting is allowed.
-    overwrite = False
-
     # Check if the specified file path already exists.
     if os.path.exists(fp):
         # Print a blank line for better readability in the console output.
@@ -270,13 +318,12 @@ def validate_output_dir(fp, name, sim_id):
             print(
                 "The game data will be overwritten when you run `game.save_simulation_data()`"
             )
-            # Set the overwrite flag to True, indicating that overwriting is allowed.
-            overwrite = True
+
             # Return the overwrite flag, the original file path, and the current simulation ID.
-            return overwrite, fp, sim_id
+            return True, fp, sim_id
     else:
-        # If the file path does not exist, return the overwrite flag, the file path, and the simulation ID.
-        return overwrite, fp, sim_id
+        # If the file path does not exist, return the False overwrite flag, the file path, and the simulation ID.
+        return False, fp, sim_id
 
 
 def check_user_input(name, sim_id):

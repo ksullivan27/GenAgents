@@ -45,7 +45,6 @@ if TYPE_CHECKING:  # Conditional import for type checking
 
 VOTING_MAX_OUTPUT = 100  # Constant defining the maximum output for voting
 
-
 class VotingSession:
     """
     Manages the voting process within a game session, allowing participants to cast votes and tally results.
@@ -66,6 +65,8 @@ class VotingSession:
         immune (List[Character]): List of participants who are immune to voting.
         exiled (List[str]): List of participants who have been exiled as a result of voting.
     """
+
+    logger = None  # Class-level attribute to store the shared logger
 
     def __init__(self, game: "Game", participants: List["Character"]):
         """
@@ -95,6 +96,9 @@ class VotingSession:
         # Padding for additional token management during GPT interactions
         self.offset_pad = 5
 
+        if VotingSession.logger is None:
+            VotingSession.logger = logging.getLogger("agent_cognition")
+
     def _set_participants(self, participants):
         """
         Sets the participants for the voting session and identifies any that are immune to voting.
@@ -123,7 +127,8 @@ class VotingSession:
         return list(set(participants))
 
     def _add_idol_possession_to_memory(self, immune_players, participants):
-        """Add idol possession information to the memory of participants.
+        """
+        Add idol possession information to the memory of participants.
 
         This function updates the memory of each participant in the game with details about immune players. It formats a
         description of the immune players and extracts relevant keywords to enhance the memory entry.
@@ -160,7 +165,8 @@ class VotingSession:
             )
 
     def _set_up_gpt(self):
-        """Initialize and configure the GPT model for use.
+        """
+        Initialize and configure the GPT model for use.
 
         This function sets up the parameters required for the GPT model, including API key, model type, and various
         settings for token generation. It returns an instance of the GptCallHandler configured with the specified
@@ -184,7 +190,8 @@ class VotingSession:
         return GptCallHandler(**model_params)
 
     def get_vote_options(self, current_voter: "Character", names_only=False):
-        """Retrieve the voting options available to the current voter.
+        """
+        Retrieve the voting options available to the current voter.
 
         This function filters the list of participants to exclude the current voter and any immune players. Depending on
         the `names_only` flag, it can return either the names of the eligible participants or the participant objects
@@ -212,7 +219,8 @@ class VotingSession:
             return [p for p in self.participants if predicate]
 
     def run(self):
-        """Execute the voting process for all participants.
+        """
+        Execute the voting process for all participants.
 
         This function iterates through each participant in the voting process, gathering necessary context and allowing
         each voter to cast their vote. It ensures that all participants have the opportunity to contribute to the voting
@@ -233,7 +241,8 @@ class VotingSession:
             self._run_character_vote(voter)
 
     def _run_character_vote(self, voter):
-        """Facilitate the voting process for a given voter.
+        """
+        Facilitate the voting process for a given voter.
 
         This function gathers the necessary context for the voter and attempts to cast a vote using the GPT model. It
         retries the voting process up to five times if the initial attempts fail, and resorts to a random vote if all
@@ -284,12 +293,18 @@ class VotingSession:
                     "This was a randomized vote because GPT failed to vote properly.",
                 )
                 break
+            else:
+                VotingSession.logger.error(
+                    f"Voter {voter.name} failed to vote properly.",
+                    extra=get_logger_extras(self.game, self.voter, include_gpt_call_id=True),
+                )
 
         # Clean up any idols used during this round of voting
         self._cleanup()
 
     def _record_vote(self, voter, vote_name, vote_confessional):
-        """Record the vote cast by a voter and update relevant records.
+        """
+        Record the vote cast by a voter and update relevant records.
 
         This function increments the tally for the specified vote name, adds the vote to the voter's memory, and updates
         the voter's record with their chosen vote. Additionally, it logs any confessional remarks made by the voter
@@ -317,7 +332,8 @@ class VotingSession:
         self._log_confessional(voter, vote_confessional)
 
     def _validate_vote(self, vote_text, voter):
-        """Validate the vote cast by a voter.
+        """
+        Validate the vote cast by a voter.
 
         This function checks the format and content of the provided vote text to ensure it is valid. It verifies that
         the vote target exists and is not the voter themselves, returning the target and reason if valid, or indicating
@@ -367,7 +383,8 @@ class VotingSession:
                     return vote_target, vote_reason, True
 
     def _add_vote_to_memory(self, voter: "Character", vote_target: str) -> None:
-        """Record the voter's action in their memory.
+        """
+        Record the voter's action in their memory.
 
         This function creates a description of the voter's action during the voting process and adds it to their memory.
         It also extracts relevant keywords from the description to enhance the memory entry.
@@ -403,7 +420,8 @@ class VotingSession:
         )
 
     def read_votes(self):
-        """Determine the participant to be exiled based on the voting tally.
+        """
+        Determine the participant to be exiled based on the voting tally.
 
         This function analyzes the voting results to identify the participant with the highest vote count. If there is a
         tie, it randomly selects one of the participants with the highest votes to be exiled.
@@ -443,7 +461,8 @@ class VotingSession:
         return exiled_participant
 
     def record_vote(self, voter):
-        """Record and retrieve the voting details for a specific voter.
+        """
+        Record and retrieve the voting details for a specific voter.
 
         This function compiles information about the voter's received votes, their voting target, and whether they are
         considered safe from exile. It returns this information in a structured format.
@@ -463,7 +482,8 @@ class VotingSession:
         ]
 
     def _gather_voter_context(self, voter: "Character"):
-        """Collect and prepare the context needed for a voter before casting a vote.
+        """
+        Collect and prepare the context needed for a voter before casting a vote.
 
         This function retrieves the voter's standard information, valid voting options, and their impressions of other
         participants. It constructs prompts for both the system and user, incorporating relevant memories and token
@@ -526,7 +546,8 @@ class VotingSession:
         return system, user
 
     def _build_system_prompt(self, standard_info, prompt_ending):
-        """Construct the system prompt for the voting process.
+        """
+        Construct the system prompt for the voting process.
 
         This function builds a system prompt by combining the provided standard information with a specified ending. It
         ensures that the prompt is formatted correctly for use in the voting context.
@@ -560,7 +581,8 @@ class VotingSession:
         prompt_ending: str,
         consumed_tokens: int = 0,
     ):
-        """Construct the user prompt for the voting process.
+        """
+        Construct the user prompt for the voting process.
 
         This function generates a user prompt that includes the voter's reflections on other participants and relevant
         memories related to the vote. It formats the prompt based on available tokens and ensures that the content is
@@ -591,7 +613,7 @@ class VotingSession:
         # Determine the number of tokens available for the user prompt
         user_available_tokens = get_token_remainder(
             self.gpt_handler.model_context_limit,
-            self.gpt_handler.max_tokens,
+            self.gpt_handler.max_output_tokens,
             consumed_tokens,
             always_included_count,
         )
@@ -632,7 +654,8 @@ class VotingSession:
         return user_prompt
 
     def gpt_cast_vote(self, system_prompt, user_prompt, voter):
-        """Generate a vote using the GPT model based on provided prompts.
+        """
+        Generate a vote using the GPT model based on provided prompts.
 
         This function constructs a call to the GPT model, passing in the system and user prompts that contain relevant
         context for the voting decision. It handles potential errors related to token limits and adjusts the token
@@ -649,7 +672,7 @@ class VotingSession:
 
         # Generate a vote by calling the GPT model with the provided system and user prompts
         # The system prompt includes context, while the user prompt contains recent memories and valid voting options
-        vote = self.gpt_handler.generate(system_prompt, user_prompt)
+        vote = self.gpt_handler.generate(system_prompt, user_prompt, character=voter)
 
         # Check if the vote returned is a tuple, indicating a potential error
         if isinstance(vote, tuple):
@@ -669,7 +692,8 @@ class VotingSession:
         return vote
 
     def _log_confessional(self, voter: "Character", message: str):
-        """Log a confessional message from a voter.
+        """
+        Log a confessional message from a voter.
 
         This function records a confessional message along with the target of the voter's action. It enriches the log
         entry with additional context about the voter and the game state.
@@ -683,7 +707,7 @@ class VotingSession:
         """
 
         # Retrieve additional logging context specific to the game and the voter
-        extras = get_logger_extras(self.game, voter)
+        extras = get_logger_extras(self.game, voter, include_gpt_call_id=True)
 
         # Set the type of log entry to "Confessional"
         extras["type"] = "Confessional"
@@ -695,7 +719,8 @@ class VotingSession:
         self.game.logger.debug(msg=message, extra=extras)
 
     def log_vote(self, exiled: "Character", message: str):
-        """Log a voting action for an exiled character.
+        """
+        Log a voting action for an exiled character.
 
         This function records a message related to the voting action of an exiled character, enriching the log entry
         with additional context about the character and the game state. It ensures that the log entry is categorized as
@@ -719,7 +744,8 @@ class VotingSession:
         self.game.logger.debug(msg=message, extra=extras)
 
     def _cleanup(self):
-        """Reset the immune status of characters and remove associated items.
+        """
+        Reset the immune status of characters and remove associated items.
 
         This function checks if there are any characters with immunity and, if so, removes their "idol" items from
         inventory and resets their immune status. It ensures that the game state is properly updated by clearing any
@@ -748,7 +774,8 @@ class VotingSession:
 
 
 class JuryVotingSession(VotingSession):
-    """Manage the voting session for a jury of characters.
+    """
+    Manage the voting session for a jury of characters.
 
     This class extends the VotingSession to specifically handle jury members and finalists in a voting scenario. It
     provides methods to gather voter context, determine voting options, and identify the winner based on the jury's
@@ -776,7 +803,8 @@ class JuryVotingSession(VotingSession):
         jury_members: List["Character"],
         finalists: List["Character"],
     ):
-        """Initialize a JuryVotingSession with game, jury members, and finalists.
+        """
+        Initialize a JuryVotingSession with game, jury members, and finalists.
 
         This constructor sets up the jury voting session by initializing the parent VotingSession with the provided
         jury members and storing the list of finalists. It ensures that the session is ready for managing the voting
@@ -799,7 +827,8 @@ class JuryVotingSession(VotingSession):
         self.finalists = finalists
 
     def get_vote_options(self, current_voter: "Character", names_only=False):
-        """Retrieve the voting options available to the current voter.
+        """
+        Retrieve the voting options available to the current voter.
 
         This function returns a list of finalists that the current voter can choose from. Depending on the `names_only`
         flag, it can return either the names of the finalists or the full character objects.
@@ -816,7 +845,8 @@ class JuryVotingSession(VotingSession):
         return [f.name for f in self.finalists] if names_only else self.finalists
 
     def _gather_voter_context(self, voter):
-        """Collect and prepare the context needed for a voter before casting their final vote.
+        """
+        Collect and prepare the context needed for a voter before casting their final vote.
 
         This function retrieves the voter's standard information and their impressions of the finalists. It constructs a
         query to recall relevant actions taken by the voter and gathers hyper-relevant memories, ultimately building
@@ -880,7 +910,8 @@ class JuryVotingSession(VotingSession):
         return system, user
 
     def determine_winner(self):
-        """Identify the winner of the voting session among the finalists.
+        """
+        Identify the winner of the voting session among the finalists.
 
         This function analyzes the voting tally to determine which finalist received the most votes. It also compiles a
         list of finalists who were not selected as the winner and marks them as exiled.

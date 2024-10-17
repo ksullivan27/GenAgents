@@ -19,13 +19,13 @@ import numpy as np  # Importing numpy for numerical operations and array handlin
 from ..utils.general import (
     enumerate_dict_options,
 )  # Function to enumerate dictionary options.
-from ..utils.consts import (
-    get_config_file,
-    get_assets_path,
-)  # Functions to retrieve configuration and asset paths.
+from ..utils.consts import get_config_file, get_assets_path
+from ..utils.general import get_logger_extras
 from ..assets.prompts import (
     gpt_helper_prompts as hp,
 )  # Importing predefined prompts for GPT helper.
+from ..games import Game
+from ..things.characters import Character
 
 # Set up a logger for this module to log messages with the module's name.
 logger = logging.getLogger(__name__)
@@ -181,6 +181,28 @@ class ClientInitializer:
         if "api_key" not in params:
             raise ValueError("'api_key' must be included in your config.")
 
+        # Load the model limits from the JSON file
+        asset_path = get_assets_path()
+        model_limits_path = os.path.join(asset_path, "openai_model_limits.json")
+        with open(model_limits_path, "r") as f:
+            model_limits = json.load(f)
+
+        # Check if 'model' is present in the provided parameters
+        if "model" in params:
+            # Check if the provided model is in the model_limits under the "LLM" key
+            if params["model"] not in model_limits["LLM"]:
+                raise ValueError(
+                    f"The provided model '{params['model']}' is not a valid OpenAI LLM model."
+                )
+
+        # Check if 'embedding_model' is present in the provided parameters
+        if "embedding_model" in params:
+            # Check if the provided embedding model is in the model_limits under the "Embeddings" key
+            if params["embedding_model"] not in model_limits["Embeddings"]:
+                raise ValueError(
+                    f"The provided embedding model '{params['embedding_model']}' is not a valid OpenAI Embedding model."
+                )
+
         # If 'timeout' is not specified, set a default timeout for the connection and read/write operations.
         if "timeout" not in params:
             # Limit connection to 15 seconds and read/write to 60 seconds.
@@ -216,7 +238,10 @@ class GptCallHandler:
 
         api_key_org (str): The organization identifier for the OpenAI API.
         model (str): The model to be used for API calls.
-        max_tokens (int): The maximum number of tokens to generate in the response.
+        embedding_model (str): The model to be used for embedding API calls.
+        model_context_limit (int): The maximum number of tokens the model can process as input.
+        max_output_tokens (int): The maximum number of tokens to generate in the response.
+        embedding_dimensions (int): The number of dimensions in the embedding output.
         temperature (float): Sampling temperature for randomness in responses.
         top_p (float): Nucleus sampling parameter.
         frequency_penalty (float): Penalty for repeated tokens.
@@ -248,12 +273,19 @@ class GptCallHandler:
     )
 
     # Instance variables that are unique to each instance of the class.
+    game: Game = None  # The game instance associated with this GPT call handler.
     api_key_org: str = "Helicone"  # The organization identifier for the OpenAI API.
     model: str = "gpt-4"  # The specific model to be used for API calls.
     embedding_model: str = (
         "text-embedding-3-small"  # The specific model to be used for embedding API calls.
     )
-    max_tokens: int = 256  # The maximum number of tokens to generate in the response.
+    model_context_limit: int = (
+        8192  # The maximum number of tokens the model can process as input.
+    )
+    max_output_tokens: int = (
+        256  # The maximum number of tokens to generate in the response.
+    )
+    embedding_dimensions: int = 768  # The number of dimensions in the embedding output.
     temperature: float = (
         1.0  # Controls the randomness of the output; higher values mean more randomness.
     )
@@ -338,16 +370,34 @@ class GptCallHandler:
 
         if self.model_limits:
             # If model limits are available, retrieve the limits for the specified model.
-            limits = self.model_limits.get(self.model, None)
+            limits = self.model_limits.get("LLM", {}).get(self.model, {})
             # Set the model context limit based on the retrieved limits, defaulting to 8192 if not specified.
             self.model_context_limit = limits.get("context", 8192)
-            # Ensure that the maximum tokens do not exceed the context limit.
-            self.max_tokens = min(self.max_tokens, limits.get("context", 8192))
+            # Ensure that the maximum tokens do not exceed either the context or max output limits.
+            self.max_output_tokens = min(
+                self.max_output_tokens,
+                self.model_context_limit,
+                limits.get("max_out", self.model_context_limit),
+            )
         else:
             # If no model limits are available, default the model context limit to 8192.
             self.model_context_limit = 8192
             # Ensure that the maximum tokens do not exceed the default context limit.
-            self.max_tokens = min(self.max_tokens, 8192)
+            self.max_output_tokens = min(self.max_output_tokens, 8192)
+
+    def _set_requested_embeddings_dimensions(self):
+        """
+        Sets the embedding dimensions for the requested embedding model based on the available model limits.
+        If the embedding model limits are not found, it defaults to using the dimensions for 'text-embedding-3-small'.
+        """
+
+        if self.model_limits:
+            # If model limits are available, retrieve the dimensions for the specified embedding model.
+            embedding_info = self.model_limits.get("Embeddings", {}).get(
+                self.embedding_model, {}
+            )
+            # Set the embedding dimensions based on the retrieved info, defaulting to 768 if not specified.
+            self.embedding_dimensions = embedding_info.get("dimensions", 768)
 
     def update_params(self, **kwargs):
         """
@@ -484,20 +534,21 @@ class GptCallHandler:
         cls.embedding_tokens_processed += add_on
 
     def generate(
-        self, system: str = None, user: str = None, messages: list = None
+        self, system: str = None, user: str = None, messages: list = None, character: Character = None
     ) -> str:
         """
         Makes a call to the OpenAI API to generate a response based on the provided messages. This method can accept
         system and user messages directly or a list of messages, and it includes error handling and retry logic for
-        various API errors. It is a wrapper for making a call to the OpenAI API. It expects a function as an argument
-        that should produce the messages argument.
+        various API errors. Also, it optionally accepts a character argument for GPT logging purposes. This method is a
+        wrapper for making a call to the OpenAI API. It expects a function as an argument that should produce the
+        messages argument.
 
         Args:
             system (str, optional): The system message to guide the behavior of the model.
             user (str, optional): The user message to provide context for the model's response.
             messages (list, optional): A list of messages to send to the model, overriding system and user parameters if
             provided.
-
+            character (Character, optional): The character to use for the conversation.
         Returns:
             str: The content of the model's response.
 
@@ -532,7 +583,7 @@ class GptCallHandler:
                     model=self.model,  # Specify the model to use for the API call.
                     messages=messages,  # Pass the messages to the API.
                     temperature=self.temperature,  # Set the randomness of the output.
-                    max_tokens=self.max_tokens,  # Limit the number of tokens in the response.
+                    max_tokens=self.max_output_tokens,  # Limit the number of tokens in the response.
                     top_p=self.top_p,  # Set the nucleus sampling parameter.
                     frequency_penalty=self.frequency_penalty,  # Apply penalty for repeated tokens.
                     presence_penalty=self.presence_penalty,  # Apply penalty for new tokens.
@@ -587,10 +638,14 @@ class GptCallHandler:
                 )  # Inform the user of the issue.
                 raise e  # Raise the error to stop execution.
             else:
+                # Log the GPT call details
+                self._log_gpt_call(messages, response, character)
+
                 # If the API call is successful, update the token counts and increment the call count.
                 self._set_token_counts(
                     response=response, system=system, user=user, messages=messages
                 )  # Update the token counts based on the messages.
+
                 # print("incrementing the number of calls to GPT")  # Uncomment to log the increment action.
                 GptCallHandler.increment_calls_count()  # Increment the total number of API calls made.
                 return response.choices[
@@ -625,10 +680,8 @@ class GptCallHandler:
         while i < self.max_retries:
             try:
                 # Create an embedding vector for the provided text using the OpenAI client.
-                response = (
-                    self.client.embeddings.create(
-                        input=[text], model=self.embedding_model, *args
-                    )
+                response = self.client.embeddings.create(
+                    input=[text], model=self.embedding_model, *args
                 )
             except openai.APITimeoutError as e:
                 # Handle timeout errors where the request took too long.
@@ -679,9 +732,11 @@ class GptCallHandler:
                 raise e  # Raise the error to stop execution.
             else:
                 # If the API call is successful, update the embedding token counts and increment the call count.
-                self._set_embedding_token_counts(text)  # Update the embedding token counts (the number of input tokens).
+                self._set_embedding_token_counts(text)
+
                 # print("incrementing the number of calls to GPT")  # Uncomment to log the increment action.
                 GptCallHandler.increment_calls_count()  # Increment the total number of API calls made.
+
                 # Get the response embeddings, and convert them to a NumPy array for further processing or analysis.
                 return np.array(response.data[0].embedding)
 
@@ -706,12 +761,9 @@ class GptCallHandler:
         """
 
         try:
-            # Attempt to extract output and total token counts from the API response.
+            # Attempt to extract input and output token counts from the API response.
+            input_tokens = response["usage"]["prompt_tokens"]
             output_tokens = response["usage"]["completion_tokens"]
-            total_tokens = response["usage"]["total_tokens"]
-
-            # Calculate the number of input tokens by subtracting output tokens from total tokens.
-            input_tokens = total_tokens - output_tokens
 
             # Update the input and output token counts in the GptCallHandler.
             GptCallHandler.update_input_token_count(input_tokens)
@@ -780,6 +832,57 @@ class GptCallHandler:
             # If the token count is successfully retrieved, update the input and output token counts in the
             # GptCallHandler.
             GptCallHandler.update_embedding_token_count(embedding_tokens)
+
+    def _log_gpt_call(self, messages, response, character=None):
+        """
+        Logs the details of a GPT call, including the messages sent, the response received, and the character associated
+        with the call if provided.
+
+        Args:
+            messages (list): A list of message dictionaries representing the conversation history.
+            response (dict): The response dictionary containing the model's response details.
+            character (Character, optional): The character associated with the GPT call, used for logging.
+        """
+
+        if self.game:
+
+            extras = get_logger_extras(
+                self.game, character=character, include_gpt_call_id=True, stack_level=2
+            )
+
+            extras["type"] = "GPT Call"
+
+            # Format the messages from the log record.
+            messages_list = []
+            for message in messages:
+                messages_list.append(
+                    f"{message['role'].title()}:\n{message['content']}"  # Format each message with its role.
+                )
+            messages = "\n\n".join(messages_list)  # Join formatted messages with double newlines.
+
+            choices = response["choices"][0]  # Get the first choice from the response.
+
+            # Add relevant response information to the extras dictionary.
+            extras["id"] = response["id"]
+            extras["model"] = response["model"]
+            extras["messages"] = messages
+            extras["response"] = choices["message"]["content"]
+            extras["finish_reason"] = choices["finish_reason"]
+
+            extras["max_output_tokens"] = self.max_output_tokens
+            extras["temperature"] = self.temperature
+            extras["top_p"] = self.top_p
+            extras["frequency_penalty"] = self.frequency_penalty
+            extras["presence_penalty"] = self.presence_penalty
+
+            # Extract and add token usage information to the message dictionary.
+            usage = response["usage"]
+            extras["prompt_tokens"] = usage["prompt_tokens"]
+            extras["completion_tokens"] = usage["completion_tokens"]
+            extras["total_tokens"] = usage["total_tokens"]
+
+            # Log the details of the GPT call, including the input and the response received.
+            self.game.gpt_call_logger.debug(f"GPT Call Details", extra=extras)
 
     def _log_gpt_error(self, e):
         """

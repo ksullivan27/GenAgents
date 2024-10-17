@@ -938,7 +938,7 @@ class GptParser(Parser):
 
             # Determine the number of available tokens for the context based on input limits.
             available_tokens = get_token_remainder(
-                self.max_input_tokens, system_count, self.gpt_handler.max_tokens
+                self.max_input_tokens, system_count, self.gpt_handler.max_output_tokens
             )
 
             # Limit the context to the last few turns of command history for relevance.
@@ -1099,7 +1099,7 @@ class GptParser(Parser):
         # Return the dictionary containing categorized keywords.
         return keys
 
-    def summarise_and_score_action(
+    def summarize_and_score_action(
         self, description, thing, command="look", needs_summary=True, needs_score=True
     ):
         """
@@ -1230,7 +1230,7 @@ class GptParser(Parser):
         if isinstance(thing, Character):
             # Generate a summary, importance score, and keywords for the action.
             summary_of_action, importance_of_action, action_keywords = (
-                self.summarise_and_score_action(description, thing, command=command)
+                self.summarize_and_score_action(description, thing, command=command)
             )
 
             # Format the command to include the character's name for clarity in the command history.

@@ -17,11 +17,21 @@ from collections import defaultdict
 # Import numpy for numerical operations.
 import numpy as np
 
+# Import the get_models_config function from the consts module in the utils package.
+# This function is used to retrieve the configuration for different models used in the game.
+from text_adventure_games.utils.consts import get_models_config
+
 # Import utility functions for logging and text embedding from the general module.
 from text_adventure_games.utils.general import get_logger_extras, get_text_embedding
 
 # Import the goal prompt from the prompts module.
 from text_adventure_games.assets.prompts import goal_prompt as gp
+
+# Import the logging module to enable logging functionality within this script
+import logging
+
+# Importing the inspect module, which provides useful functions to get information about live objects
+import inspect
 
 # Import helper functions for GPT calls and context management from the gpt_helpers module.
 from text_adventure_games.gpt.gpt_helpers import (
@@ -37,9 +47,6 @@ if TYPE_CHECKING:
     from text_adventure_games.things.characters import Character
     from text_adventure_games.games import Game
 
-# Define a constant for the maximum output length for goals.
-GOALS_MAX_OUTPUT = 256
-
 # 1. Get character's goals
 # 2. Obtain a list of memories
 # 3. ask
@@ -48,12 +55,11 @@ GOALS_MAX_OUTPUT = 256
 # TODO: summarize impressions for goals ? - TBD
 # TODO: pass previous round plan - try passing in system prompt - try on playground first
 
-
 class Goals:
     """
     Manages the goals for a character within the game, allowing for the creation, updating, and evaluation of goals
-    based on the character's actions and reflections. This class utilizes a GPT handler to generate goals and maintains
-    a structured format for storing and retrieving goals by priority and round.
+    based on the character's actions and reflections. This class utilizes a shared GPT handler to generate goals and
+    maintains a structured format for storing and retrieving goals by priority and round.
 
     Args:
         character (Character): The character for whom the goals are being managed.
@@ -64,14 +70,14 @@ class Goals:
         goal_scores (defaultdict): A dictionary storing goal completion scores categorized by round and priority.
         recent_reflection: Stores the most recent reflection made by the character.
         goal_embeddings (defaultdict): A dictionary storing embeddings for each goal by round.
-        gpt_handler (GptCallHandler): The handler for making calls to the GPT model.
         token_offset (int): The offset for managing token limits in GPT calls.
         offset_pad (int): Additional padding for token management.
 
-    Methods:
-        _set_up_gpt():
-            Configures and initializes the GPT handler with the specified model parameters.
+    Class Attributes:
+        gpt_handler (GptCallHandler): A class-level shared GPT handler for all instances.
+        model_params (dict): Class-level model parameters for configuring the GPT handler.
 
+    Methods:
         _log_goals(game, message):
             Logs the specified message related to goals in the game's logger.
 
@@ -87,7 +93,7 @@ class Goals:
         build_user_prompt(game, consumed_tokens=0):
             Constructs the user prompt for goal generation, incorporating relevant context and previous goals.
 
-        goal_update(goal, goal_embedding, game):
+        goal_update(goal, goal_embeddings, game):
             Updates the goals for the current round based on the provided goal string and its embedding.
 
         get_goals(round=-1, priority="all", as_str=False):
@@ -99,8 +105,8 @@ class Goals:
         _create_goal_embedding(goal):
             Generates an embedding for a specified goal.
 
-        get_goal_embedding(round):
-            Retrieves the goal embedding for a specified round.
+        get_goal_embeddings(round):
+            Retrieves the goal embeddings for a specified round.
 
         update_goals_in_memory(round):
             Updates the character's memory with the current goal embedding for a specified round.
@@ -118,17 +124,29 @@ class Goals:
             Retrieves goal completion scores based on the specified round and priority.
     """
 
+    gpt_handler = None  # Class-level attribute to store the shared GPT handler
+    model_params = {
+        "api_key_org": "Helicone",
+        "model": get_models_config()["goals"]["model"],
+        "max_tokens": 256,
+        "temperature": 1,
+        "top_p": 1,
+        "max_retries": 5,
+    }
+
+    logger = None  # Class-level attribute to store the shared logger
+
     def __init__(self, character: "Character"):
         """
         Initializes the Goals manager for a character, setting up the necessary data structures to track goals, scores,
-        and embeddings. This constructor also configures the GPT handler for generating goals and initializes parameters
+        and embeddings. This constructor also ensures the shared GPT handler is configured for generating goals and initializes parameters
         for managing token limits.
 
         The goal is stored in the form of a dictionary based on the priority with the round number as the key in the
         following format:
             {Round #:
                 {"Low Priority": _description_,
-                 "Medium Priority: _description_,
+                 "Medium Priority": _description_,
                  "High Priority": _description_}
 
         Args:
@@ -140,7 +158,6 @@ class Goals:
             goal_scores (defaultdict): A dictionary storing goal completion scores categorized by round and priority.
             recent_reflection: Stores the most recent reflection made by the character.
             goal_embeddings (defaultdict): A dictionary storing embeddings for each goal by round.
-            gpt_handler (GptCallHandler): The handler for making calls to the GPT model.
             token_offset (int): The offset for managing token limits in GPT calls.
             offset_pad (int): Additional padding for token management.
         """
@@ -157,41 +174,23 @@ class Goals:
         # Initialize a variable to store the most recent reflection made by the character.
         self.recent_reflection = None
 
-        # Initialize a defaultdict to store embeddings for each goal by round.
-        self.goal_embeddings = defaultdict(np.ndarray)
+        # Ensure the shared GPT call handler is set up
+        if Goals.gpt_handler is None:
+            Goals.gpt_handler = GptCallHandler(**Goals.model_params)
 
-        # Set up the GPT call handler for generating goals and managing interactions with the GPT model.
-        self.gpt_handler = self._set_up_gpt()
+        if Goals.logger is None:
+            Goals.logger = logging.getLogger("agent_cognition")
+
+        # Initialize a defaultdict to store embeddings for each goal by round.
+        self.goal_embeddings = defaultdict(
+            lambda: None  # np.zeros((3, Goals.gpt_handler.embedding_dimensions))
+        )
 
         # Set the token offset to account for a few variable tokens in the user prompt.
-        self.token_offset = (
-            50  # Taking into account a few variable tokens in the user prompt
-        )
+        self.token_offset = 50  # Taking into account a few variable tokens in the user prompt
 
         # Initialize an offset padding value for managing token limits.
         self.offset_pad = 5
-
-    def _set_up_gpt(self):
-        """
-        Configures and initializes the GPT handler with the specified model parameters. This method sets up the
-        necessary configurations for the GPT model to be used in generating responses related to goals.
-
-        Returns:
-            GptCallHandler: An instance of the GptCallHandler configured with the specified parameters.
-        """
-
-        # Define the parameters for configuring the GPT model.
-        model_params = {
-            "api_key_org": "Helicone",  # Organization API key for accessing the GPT model.
-            "model": "gpt-4",  # Specify the model version to be used.
-            "max_tokens": GOALS_MAX_OUTPUT,  # Maximum number of tokens to generate in the response.
-            "temperature": 1,  # Controls the randomness of the output; higher values result in more random outputs.
-            "top_p": 1,  # Nucleus sampling parameter; controls diversity by limiting the cumulative probability of token selection.
-            "max_retries": 5,  # Maximum number of retries for generating a response in case of errors.
-        }
-
-        # Return an instance of GptCallHandler initialized with the specified model parameters.
-        return GptCallHandler(**model_params)
 
     def _log_goals(self, game, message):
         """
@@ -207,10 +206,9 @@ class Goals:
         """
 
         # Retrieve additional logging context specific to the game and character.
-        extras = get_logger_extras(game, self.character)
+        extras = get_logger_extras(game, self.character, include_gpt_call_id=True)
 
-        # Set the type of log entry to "Goal" for categorization.
-        extras["type"] = "Goal"
+        extras["type"] = "Goals"
 
         # Log the debug message along with the additional context.
         game.logger.debug(msg=message, extra=extras)
@@ -231,13 +229,13 @@ class Goals:
         # Build the system and user prompts required for goal generation.
         system, user = self.build_goal_prompts(game)
 
-        # Generate a goal using the GPT handler based on the constructed prompts.
-        goal = self.gpt_handler.generate(system=system, user=user)
+        # Generate goals using the GPT handler based on the constructed prompts.
+        goals = Goals.gpt_handler.generate(system=system, user=user, character=self.character)
 
         # Check if the generated goal is a tuple, indicating a potential error related to token limits.
-        if isinstance(goal, tuple):
+        if isinstance(goals, tuple):
             # Unpack the tuple to get the success status and the token difference.
-            success, token_difference = goal
+            _, token_difference = goals
 
             # Update the token offset to account for the exceeded limit and add padding for future calculations.
             self.token_offset = token_difference + self.offset_pad
@@ -247,21 +245,20 @@ class Goals:
             return self.gpt_generate_goals(self.game)
 
         # Log the generated goal for tracking and debugging purposes.
-        self._log_goals(game, goal)
+        self._log_goals(game, goals)
 
         # Create an embedding for the generated goal to facilitate further processing.
-        goal_embed = self._create_goal_embedding(goal)
+        goal_embed = self._create_goal_embedding(goals, game)
 
         # Update the goal with the new embedding for experimentation purposes.
-        self.goal_update(goal, goal_embed, game)
+        self.goal_update(goals, goal_embed, game)
 
         # Return the generated goal.
-        return goal
+        return goals
 
     def build_goal_prompts(self, game):
         """
         Constructs the system and user prompts necessary for goal generation.
-        This method builds the prompts based on the current game state and the number of tokens consumed.
 
         Args:
             game: The current game instance used to generate the prompts.
@@ -284,9 +281,8 @@ class Goals:
 
     def build_system_prompt(self, game):
         """
-        Constructs the system prompt used for generating goals in the game.
-        This method combines the character's standard information with a predefined goals prompt and calculates the
-        token count.
+        Constructs the system prompt used for generating goals in the game, utilizing the character's standard
+        information.
 
         Args:
             game: The current game instance used to gather character information.
@@ -295,9 +291,9 @@ class Goals:
             tuple: A tuple containing the constructed system prompt and its token count.
         """
 
-        # Retrieve the standard information about the character from the game, excluding perceptions.
+        # Retrieve the standard information about the character from the game, excluding goals and perceptions.
         system_prompt = self.character.get_standard_info(
-            game, include_perceptions=False
+            game, include_goals=False, include_perceptions=False
         )
 
         # Append the predefined goals prompt to the character's standard information to form the complete system prompt.
@@ -315,11 +311,9 @@ class Goals:
         return system_prompt, system_tkn_count
 
     def build_user_prompt(self, game, consumed_tokens=0):
-        # sourcery skip: avoid-builtin-shadow
         """
-        Constructs the user prompt for goal generation, incorporating relevant context and previous goals.
-        This method gathers reflections, previous goals, and scores from the last two rounds to provide a comprehensive
-        context for the user.
+        Constructs the user prompt for goal generation, incorporating relevant context including reflections, previous
+        goals, and scores from the last two rounds to provide a comprehensive context for the user.
 
         Args:
             game: The current game instance used to gather information.
@@ -331,7 +325,11 @@ class Goals:
 
         # Define a list of strings that are always included in the user prompt
         always_included = [
-            "Additional context for creating your goal:\n",
+            "Additional context for creating your goal:\n\n",
+            "Reflections on last few rounds:\n\t",
+            "Goals of prior round with current progress scores:\n\t",
+            "Goals of two rounds prior with progress scores from prior round:\n\t",
+            "Goals of three rounds prior with progress scores from two rounds prior:\n\t",
             "You can keep the previous goal, update the previous goal or create a new one based on your strategy.",
         ]
 
@@ -345,8 +343,8 @@ class Goals:
 
         # Determine the number of available tokens for reflections and goals
         available_tokens = get_token_remainder(
-            self.gpt_handler.model_context_limit,
-            self.gpt_handler.max_tokens,
+            Goals.gpt_handler.model_context_limit,
+            Goals.gpt_handler.max_output_tokens,
             consumed_tokens,
             always_included_count,
         )
@@ -354,131 +352,160 @@ class Goals:
         # Set limits for reflections and goals based on available tokens
         reflections_limit, goals_limit = int(available_tokens * 0.6), int(
             available_tokens * 0.3
-        )
+        ) # TODO: keep 0.3 + 0.6 < 1?
 
-        # Retrieve goals and scores for the previous round and two rounds prior
+        # Retrieve goals and scores for the previous three rounds
         round = game.round
-        goal_prev = None
-        goal_prev_2 = None
+        goals_prev_1 = None
+        goals_prev_2 = None
+        goals_prev_3 = None
 
         # Get the previous round's goal and score if it exists
         if round > 0:
-            goal_prev = self.get_goals(round=round - 1, as_str=True)
-            score = self.get_goal_scores(round=round - 1, as_str=True)
+            goals_prev_1 = self.get_goals(round=round - 1, as_str=False)
+            scores_prev_1 = self.get_goal_scores(round=round - 1, as_str=False)
+            goals_prev_1 = Goals.format_goals_with_scores(goals_prev_1, scores_prev_1)
 
         # Get the goal and score from two rounds prior if it exists
         if round > 1:
-            goal_prev_2 = self.get_goals(round=round - 2, as_str=True)
-            score_2 = self.get_goal_scores(round=round - 2, as_str=True)
+            goals_prev_2 = self.get_goals(round=round - 2, as_str=False)
+            scores_prev_2 = self.get_goal_scores(round=round - 2, as_str=False)
+            goals_prev_2 = Goals.format_goals_with_scores(goals_prev_2, scores_prev_2)
 
-        # Retrieve reflection nodes for two rounds prior
-        reflection_raw_2 = []
+        # Get the goal and score from three rounds prior if it exists
+        if round > 2:
+            goals_prev_3 = self.get_goals(round=round - 3, as_str=False)
+            scores_prev_3 = self.get_goal_scores(round=round - 3, as_str=False)
+            goals_prev_3 = Goals.format_goals_with_scores(goals_prev_3, scores_prev_3)
+
+        # Retrieve reflection nodes for three rounds prior
+        reflections_raw = []
+
         node_ids = self.character.memory.get_observations_after_round(
-            round - 2, inclusive=True
+            round - 3, inclusive=True
         )
 
         # Collect reflection descriptions from the memory
         for node_id in node_ids:
             node = self.character.memory.get_observation(node_id)
             if node.node_type.value == 3:  # Check if the node type is a reflection
-                reflection_raw_2.append(node.node_description)
+                reflections_raw.append(node.node_description)
 
         # Initialize the user prompt with the always included context
-        user_prompt = always_included[0]
+        user_prompt = always_included[
+            0
+        ]  # "Additional context for creating your goal:\n\n"
 
         # If there are reflections from two rounds prior, add them to the user prompt
-        if reflection_raw_2:
-            user_prompt += "Reflections on last two rounds:"
+        if reflections_raw:
+            user_prompt += always_included[1]  # "Reflections on last few rounds:\n\t"
             context_list = limit_context_length(
-                history=reflection_raw_2,
+                history=reflections_raw,
                 max_tokens=reflections_limit,
                 tokenizer=game.parser.tokenizer,
+                keep_most_recent=True
             )
-            reflection_2 = context_list_to_string(context_list, sep="\n")
-            user_prompt += f"{reflection_2}\n"
+            reflection_str = context_list_to_string(context_list, sep="\n\t")
+            user_prompt += f"{reflection_str}\n\n"
 
         # If there is a goal from the previous round, add it to the user prompt
-        if goal_prev:
+        if goals_prev_1:
             context_list = [
-                "Goals of prior round:",
-                goal_prev,
-                "Goal Completion Score of prior round:",
-                score,
+                always_included[2],  # "Goals of prior round with current progress scores:\n\t"
+                goals_prev_1,
             ]
             context_list = limit_context_length(
                 history=context_list,
-                max_tokens=goals_limit // 2,
+                max_tokens=goals_limit // 3,
                 tokenizer=game.parser.tokenizer,
+                keep_most_recent=True
             )
-            goal_prev_str = context_list_to_string(context_list, sep="\n")
+            goal_prev_str = context_list_to_string(context_list, sep="\n\t")
             user_prompt += f"{goal_prev_str}\n\n"
 
         # If there is a goal from two rounds prior, add it to the user prompt
-        if goal_prev_2:
+        if goals_prev_2:
             context_list = [
-                "Goals of two rounds prior:",
-                goal_prev_2,
-                "Goal Completion Score of two rounds prior:",
-                score_2,
+                always_included[3],  # "Goals of two rounds prior with previous round's progress scores:\n\t"
+                goals_prev_2,
             ]
             context_list = limit_context_length(
                 history=context_list,
-                max_tokens=goals_limit // 2,
+                max_tokens=goals_limit // 3,
                 tokenizer=game.parser.tokenizer,
+                keep_most_recent=True
             )
-            goal_prev_2_str = context_list_to_string(context_list, sep="\n")
-            user_prompt += f"{goal_prev_2_str}\n"
+            goal_prev_2_str = context_list_to_string(context_list, sep="\n\t")
+            user_prompt += f"{goal_prev_2_str}\n\n"
+
+        # If there is a goal from three rounds prior, add it to the user prompt
+        if goals_prev_3:
+            context_list = [
+                always_included[4],  # "Goals of three rounds prior with progress scores from two rounds prior:\n\t"
+                goals_prev_3,
+            ]
+            context_list = limit_context_length(
+                history=context_list,
+                max_tokens=goals_limit // 3,
+                tokenizer=game.parser.tokenizer,
+                keep_most_recent=True
+            )
+            goal_prev_3_str = context_list_to_string(context_list, sep="\n\t")
+            user_prompt += f"{goal_prev_3_str}\n\n"
 
         # Append the final always included context to the user prompt
-        user_prompt += always_included[1]
+        user_prompt += always_included[
+            6
+        ]  # "You can keep the previous goal, update the previous goal or create a new one based on your strategy."
 
         # Return the constructed user prompt
         return user_prompt
 
-    def goal_update(self, goal: str, goal_embedding: np.ndarray, game: "Game"):
-        # sourcery skip: avoid-builtin-shadow
+    def goal_update(self, goal: str, goal_embeddings: np.ndarray, game: "Game"):
         """
-        Updates the goals for the current round based on the provided goal string and its embedding.
+        Updates the goals for the current round based on the provided goal string and its embeddings.
         This method categorizes the goals into priority levels and stores them along with their embeddings for future
         reference.
 
         Args:
             goal (str): A string containing the goals, categorized by priority.
-            goal_embedding (np.ndarray): The embedding representation of the goal for further processing.
+            goal_embeddings (np.ndarray): The embeddings representation of the goal for further processing.
             game (Game): The current game instance used to access the round information.
 
         Returns:
             None
         """
 
-        # Get the current round from the game
-        round = game.round
-
         # Initialize a dictionary for goals in the current round
-        self.goals[round] = {}
+        self.goals[game.round] = {}
 
         # Split the goal string into lines and process each line
         for line in goal.split("\n"):
             # Check for 'Low Priority' in the line and store the corresponding goal
             if "Low Priority" in line:
-                self.goals[round]["Low Priority"] = line.replace("Low Priority: ", "")
+                self.goals[game.round]["Low Priority"] = line.replace(
+                    "Low Priority: ", ""
+                )
             # Check for 'Medium Priority' in the line and store the corresponding goal
             elif "Medium Priority" in line:
-                self.goals[round]["Medium Priority"] = line.replace(
+                self.goals[game.round]["Medium Priority"] = line.replace(
                     "Medium Priority: ", ""
                 )
             # Check for 'High Priority' in the line and store the corresponding goal
             elif "High Priority" in line:
-                self.goals[round]["High Priority"] = line.replace("High Priority: ", "")
+                self.goals[game.round]["High Priority"] = line.replace(
+                    "High Priority: ", ""
+                )
 
         # Update the goal embeddings for the current round
-        self.goal_embeddings.update({round: goal_embedding})
+        self.goal_embeddings.update({game.round: goal_embeddings})
 
         # Persist the updated goals in memory for the current round
-        self.update_goals_in_memory(round)
+        self.update_goals_in_memory(game.round)
 
     def get_goals(self, round=-1, priority="all", as_str=False):
-        """Retrieves goals based on the specified round and priority.
+        """
+        Retrieves goals based on the specified round and priority.
 
         This method allows for flexible retrieval of goals, either for a specific round and priority or all goals if no
         specific criteria are provided. It can also return the goals as a string representation if requested.
@@ -493,16 +520,6 @@ class Goals:
         Returns:
             Union[dict, str]: The goals for the specified round and priority, or a string representation of the goals if
             as_str is True.
-        """
-
-        """
-        Getter function for goal
-            Args:
-                round: round number (default is all rounds)
-                priority: priority of goal needed (default is all priority goals)
-
-            Returns:
-                The goal
         """
 
         if (
@@ -520,7 +537,8 @@ class Goals:
         return self.stringify_goal(goal) if as_str else goal
 
     def stringify_goal(self, goal):
-        """Converts a goal or a collection of goals into a string representation.
+        """
+        Converts a goal or a collection of goals into a string representation.
 
         This method checks the type of the provided goal and converts it to a string.
         If the goal is a collection, it concatenates the values into a single string, handling potential type errors
@@ -541,7 +559,6 @@ class Goals:
         )
 
         try:
-            # TODO: shouldn't this be "if len(goal) > 1:"?
             # Check if the goal is a collection with more than one item
             if len(goal) > 1:
                 # Convert the entire collection to a string
@@ -559,8 +576,9 @@ class Goals:
             # Return the accumulated goal_str, which may be empty
             return goal_str
 
-    def _create_goal_embedding(self, goal: str) -> np.ndarray:
-        """Generates an embedding for a specified goal.
+    def _create_goal_embedding(self, goal: str, game: "Game") -> np.ndarray:
+        """
+        Generates an embedding for a specified goal.
 
         This method takes a goal represented as a string and converts it into a numerical embedding using a text
         embedding function. The resulting embedding can be used for various applications, such as similarity comparisons
@@ -573,28 +591,51 @@ class Goals:
             np.ndarray: The numerical embedding representation of the specified goal.
         """
 
-        return get_text_embedding(goal)
+        # Initialize a dictionary for goals in the current round
+        goals_dict = {}
 
-    def get_goal_embedding(self, round: int):
-        """Retrieves the goal embedding for a specified round.
+        # Split the goal string into lines and process each line
+        for line in goal.split("\n"):
+            # Check for 'Low Priority' in the line and store the corresponding goal
+            if "Low Priority" in line:
+                goals_dict["Low Priority"] = line.replace("Low Priority: ", "")
+            # Check for 'Medium Priority' in the line and store the corresponding goal
+            elif "Medium Priority" in line:
+                goals_dict["Medium Priority"] = line.replace("Medium Priority: ", "")
+            # Check for 'High Priority' in the line and store the corresponding goal
+            elif "High Priority" in line:
+                goals_dict["High Priority"] = line.replace("High Priority: ", "")
+            else:
+                goals_dict["Unknown Priority"] = line
+                Goals.logger.warning(
+                    f"Unknown priority level: {line}",
+                    extra=get_logger_extras(game, self.character, include_gpt_call_id=True),
+                )
 
-        This method looks up the goal embedding associated with the given round number.
+        return Goals.client.generate_embeddings(list(goals_dict.values()))
+
+    def get_goal_embeddings(self, round: int):
+        """
+        Retrieves the goal embeddings for a specified round.
+
+        This method looks up the goal embeddings associated with the given round number.
         If no embedding exists for that round, it returns None, allowing for easy handling of missing data.
 
         Args:
-            round (int): The round number for which to retrieve the goal embedding.
+            round (int): The round number for which to retrieve the goal embeddings.
 
         Returns:
-            np.ndarray or None: The goal embedding for the specified round, or None if no embedding exists.
+            np.ndarray or None: The goal embeddings for the specified round, or None if no embeddings exists.
         """
 
         return self.goal_embeddings.get(round, None)
 
     def update_goals_in_memory(self, round):
-        """Updates the character's memory with the current goal embedding for a specified round.
+        """
+        Updates the character's memory with the current goal embeddings for a specified round.
 
-        This method retrieves the goal embedding associated with the given round and, if it exists,
-        updates the character's memory with this embedding. This ensures that the character's memory reflects the
+        This method retrieves the goal embeddings associated with the given round and, if they exist,
+        updates the character's memory with these embeddings. This ensures that the character's memory reflects the
         current goals.
 
         Args:
@@ -604,31 +645,43 @@ class Goals:
             None
         """
 
-        # Retrieve the current goal embedding for the specified round
-        curr_embedding = self.get_goal_embedding(round)
+        # Retrieve the current goal embeddings for the specified round
+        curr_embeddings = self.get_goal_embeddings(round)
 
-        # Check if the retrieved embedding is not None
-        if curr_embedding is not None:
-            # Update the character's memory with the current goal embedding
-            self.character.memory.set_goal_query(curr_embedding)
+        # Check if the retrieved embeddings is not None
+        if curr_embeddings is not None:
+            # Update the character's memory with the current goal embeddings
+            self.character.memory.set_goal_query(curr_embeddings)
 
     # ----------- EVALUATION -----------
-    def evaluate_goals(self, game: "Game"):
-        """Evaluates the goals of the agent within the context of the game.
+    def evaluate_goals(self, game: "Game", impartial: bool = True):
+        """
+        Evaluates the goals of the agent within the context of the game.
 
         This method constructs prompts for a language model to assess the agent's goals based on the current game state.
         It retrieves scores from the model and updates the agent's score accordingly, providing feedback on goal
-        performance. User prompt uses: reflection, actions, goals of previous round
+        performance. The evaluation can be done impartially or from the character's perspective.
 
         Args:
             game (Game): The current game instance used to evaluate the agent's goals.
+            impartial (bool, optional): If True, evaluates goals impartially. If False, evaluates from the character's
+            perspective. Defaults to True.
 
         Returns:
             list: The scores generated by the evaluation of the agent's goals.
         """
 
-        # Retrieve the system prompt for evaluating goals from the gp module
-        system_prompt = gp.evaluate_goals_prompt
+        if impartial:
+            system_prompt = gp.impartial_evaluate_goals_prompt
+        else:
+            # Retrieve the standard information about the character from the game, excluding goals and perceptions.
+            system_prompt = self.character.get_standard_info(
+                game, include_goals=False, include_perceptions=False
+            )
+
+            # Retrieve the system prompt for evaluating goals from the gp module
+            system_prompt += "\n" + gp.persona_evaluate_goals_prompt
+
         # Count the tokens in the system prompt for token management
         system_prompt_tokens = get_prompt_token_count(system_prompt, role="system")
 
@@ -638,7 +691,9 @@ class Goals:
         )
 
         # Generate scores by passing the system and user prompts to the GPT handler
-        scores = self.gpt_handler.generate(system=system_prompt, user=user_prompt)
+        scores = Goals.gpt_handler.generate(
+            system=system_prompt, user=user_prompt, character=self.character
+        )
         # Update the agent's score based on the generated scores and the current game
         self.score_update(scores, game)
 
@@ -646,7 +701,6 @@ class Goals:
         return scores
 
     def build_eval_user_prompt(self, game, consumed_tokens=0):
-        # sourcery skip: avoid-builtin-shadow
         """
         Constructs a user prompt for evaluating progress towards a goal based on reflections and actions from the
         current round. This prompt includes the current goal, reflections, and actions, formatted for user input.
@@ -660,15 +714,14 @@ class Goals:
             str: A formatted string containing the user prompt with the goal, reflections, and actions.
         """
 
-        # Retrieve the current goal for the ongoing round and format it for the prompt
-        goal = self.get_goals(round=game.round, as_str=True)
-        goal_prompt = f"Goal:{goal}\n\n"
+        # Retrieve the current goals for the ongoing round and format it for the prompt
+        goals = self.get_goals(round=game.round, as_str=True)
+        goal_prompt = f"Goals:\n{goals}\n\n"
 
         # Define a list of strings that will always be included in the user prompt
         always_included = [
-            "Score the progress toward the goal that is suggested by the reflections provided below:\n",
+            "Score the progress toward the goal that is suggested by the memories provided below:\n",
             goal_prompt,
-            "Your reflections and actions from this round:",
         ]
 
         # Calculate the token count for the always included strings
@@ -678,7 +731,7 @@ class Goals:
 
         # Determine the number of available tokens for reflections and actions
         available_tokens = get_token_remainder(
-            self.gpt_handler.model_context_limit,
+            Goals.gpt_handler.model_context_limit,
             consumed_tokens,
             always_included_tokens,
         )
@@ -686,6 +739,7 @@ class Goals:
         # Initialize lists to store reflections and actions for the current round
         reflections_raw = []
         actions_raw = []
+        dialogue_raw = []
         round = game.round
 
         # Retrieve observation node IDs for the current round
@@ -694,33 +748,70 @@ class Goals:
         # Collect reflections and actions made by this agent in the current round
         for node_id in node_ids:
             node = self.character.memory.get_observation(node_id)
-            # Check if the node is a reflection made by this agent
-            if node.node_type.value == 3 and node.node_is_self == 1:
-                reflections_raw.append(node.node_description)
             # Check if the node is an action made by this agent
             if node.node_type.value == 1 and node.node_is_self == 1:
                 actions_raw.append(node.node_description)
+            # Check if the node is a dialogue made by this agent
+            elif node.node_type.value == 2 and node.node_is_self == 1:
+                dialogue_raw.append(node.node_description)
+            # Check if the node is a reflection made by this agent
+            elif node.node_type.value == 3 and node.node_is_self == 1:
+                reflections_raw.append(node.node_description)
 
-        # Limit the length of the reflections based on available tokens
-        reflections_list = limit_context_length(
-            history=reflections_raw,
-            max_tokens=available_tokens // 2,
-            tokenizer=game.parser.tokenizer,
+        # Set limits for actions, dialogue, and reflections based on available tokens
+        actions_limit, dialogue_limit, reflections_limit = (
+            int(available_tokens * 0.4),
+            int(available_tokens * 0.3),
+            int(available_tokens * 0.3),
         )
-        # Convert the limited reflections list to a formatted string
-        reflections_str = context_list_to_string(reflections_list, sep="\n")
 
         # Limit the length of the actions based on available tokens
         actions_list = limit_context_length(
             history=actions_raw,
-            max_tokens=available_tokens // 2,
+            max_tokens=actions_limit,
             tokenizer=game.parser.tokenizer,
         )
 
+        # Limit the length of the actions based on available tokens
+        dialogue_list = limit_context_length(
+            history=dialogue_raw,
+            max_tokens=dialogue_limit,
+            tokenizer=game.parser.tokenizer,
+        )
+
+        # Limit the length of the reflections based on available tokens
+        reflections_list = limit_context_length(
+            history=reflections_raw,
+            max_tokens=reflections_limit,
+            tokenizer=game.parser.tokenizer,
+        )
+
+        # Convert the limited actions, dialogue, and reflections actions lists to formatted strings
+        actions_str = context_list_to_string(actions_list, sep="\n")
+        dialogue_str = context_list_to_string(dialogue_list, sep="\n")
+        reflections_str = context_list_to_string(reflections_list, sep="\n")
+
+        user_prompt = always_included[0]
+        user_prompt += goal_prompt
+        user_prompt += f"Actions:\n{actions_str}\n\n"
+        user_prompt += f"Dialogues:\n{dialogue_str}\n\n"
+        user_prompt += f"Reflections:\n{reflections_str}"
+        return user_prompt
+
     def score_update(self, score: str, game: "Game"):
-        # sourcery skip: avoid-builtin-shadow
         """
-        Maintains the dictionary of goal completion scores for the character by round
+        Updates the dictionary of goal completion scores for the character by round.
+
+        This method processes a score string that contains scores for different priority levels 
+        and updates the corresponding entries in the goal_scores dictionary for the current round.
+
+        Args:
+            score (str): A string containing the scores for different priority levels, formatted as 
+                         'Low Priority: <score>', 'Medium Priority: <score>', and 'High Priority: <score>'.
+            game (Game): The current game instance, used to retrieve the current round and for logging errors.
+
+        Returns:
+            None
         """
 
         # Get the current round from the game
@@ -739,7 +830,10 @@ class Goals:
                     )
                 except ValueError:
                     # Handle the case where conversion to integer fails
-                    print("Error: Unable to convert 'Low Priority' to an integer.")
+                    Goals.logger.error(
+                        "Unable to convert 'Low Priority' to an integer.",
+                        extra=get_logger_extras(game, self.character, include_gpt_call_id=True),
+                    )
 
             # Check for 'Medium Priority' in the line and attempt to convert the score to an integer
             elif "Medium Priority" in line:
@@ -749,7 +843,10 @@ class Goals:
                     )
                 except ValueError:
                     # Handle the case where conversion to integer fails
-                    print("Error: Unable to convert 'Medium Priority' to an integer.")
+                    Goals.logger.error(
+                        "Unable to convert 'Medium Priority' to an integer.",
+                        extra=get_logger_extras(game, self.character, include_gpt_call_id=True),
+                    )
 
             # Check for 'High Priority' in the line and attempt to convert the score to an integer
             elif "High Priority" in line:
@@ -759,17 +856,25 @@ class Goals:
                     )
                 except ValueError:
                     # Handle the case where conversion to integer fails
-                    print("Error: Unable to convert 'High Priority' to an integer.")
+                    Goals.logger.error(
+                        "Unable to convert 'High Priority' to an integer.",
+                        extra=get_logger_extras(game, self.character, include_gpt_call_id=True),
+                    )
 
     def get_goal_scores(self, round=-1, priority="all", as_str=False):
         """
-        Getter function for goal completion scores
-            Args:
-                round: round number (default is all rounds)
-                priority: priority of goal score needed (default is all priority goal scores)
+        Retrieves goal completion scores based on the specified round and priority.
 
-            Returns:
-                The goal score
+        Args:
+            round (int, optional): The round number for which to retrieve scores. Defaults to -1, which retrieves scores
+            for all rounds.
+            priority (str, optional): The priority level of the scores to retrieve. Defaults to "all", which retrieves
+            scores of all priorities.
+            as_str (bool, optional): If True, returns the scores as a string. Defaults to False.
+
+        Returns:
+            Union[dict, str]: The goal score for the specified round and priority, or a string representation of the
+            scores if as_str is True.
         """
 
         # Check if the current round is valid and a specific priority is requested
@@ -785,3 +890,12 @@ class Goals:
 
         # Return the score as a string if as_str is True, otherwise return the score as is
         return self.stringify_goal(score) if as_str else score
+
+    @classmethod
+    def format_goals_with_scores(cls, goals, scores):
+
+        list_goals = list(goals.items())
+        list_scores = scores.values()
+        combined = zip(list_goals, list_scores)
+        formatted_goals = [f"{item[0].capitalize()}: {item[1]} (progress score: {score})" for ((item, score)) in combined]
+        return "\n\t".join(formatted_goals)

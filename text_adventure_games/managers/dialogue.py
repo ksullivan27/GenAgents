@@ -273,7 +273,7 @@ class Dialogue:
                     - system_instruction_token_count
                     - self.dialogue_history_token_count
                     - 5
-                    - self.gpt_handler.max_tokens,
+                    - self.gpt_handler.max_output_tokens,
                     keep_most_recent=False,
                 )
 
@@ -303,7 +303,7 @@ class Dialogue:
             - system_instruction_token_count
             - self.characters_user[character.name]["impressions"][0]
             - self.characters_user[character.name]["memories"][0]
-            - self.gpt_handler.max_tokens,
+            - self.gpt_handler.max_output_tokens,
         )
 
         # Convert the limited dialogue to a single string

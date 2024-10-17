@@ -37,8 +37,8 @@
       "queue_handler": {
         "()": "text_adventure_games.utils.custom_logging.custom_logging_handlers.QueueListenerHandler",
         "handlers": [
-          "cfg://handlers.err_std",
-          "cfg://handlers.file_json"
+          "err_std",
+          "file_json"
         ],
         "respect_handler_level": true
       },
@@ -49,6 +49,20 @@
         "filename": "logs/warnings.jsonl",
         "maxBytes": 2000000,
         "backupCount": 3
+      },
+      "gpt_calls_file_json": {
+        "class": "logging.FileHandler",
+        "level": "DEBUG",
+        "formatter": "json",
+        "filename": "logs/tmp_gpt_calls.jsonl",
+        "mode": "a"
+      },
+      "gpt_calls_queue_handler": {
+        "()": "text_adventure_games.utils.custom_logging.custom_logging_handlers.QueueListenerHandler",
+        "handlers": [
+          "gpt_calls_file_json"
+        ],
+        "respect_handler_level": true
       }
     },
     "loggers": {
@@ -59,10 +73,16 @@
             "warning_json"
         ]
       },
-      "survivor_global_logger":{
+      "gen_agents_global_logger":{
         "level": "DEBUG",
         "handlers": [
           "queue_handler"
+        ]
+      },
+      "gpt_calls_logger": {
+        "level": "DEBUG",
+        "handlers": [
+          "gpt_calls_queue_handler"
         ]
       }
     }

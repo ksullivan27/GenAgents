@@ -14,9 +14,6 @@ from ..agent.memory_stream import MemoryStream, MemoryType
 # Import the Act class from the agent_cognition module to handle actions performed by agents.
 from ..agent.agent_cognition.act import Act
 
-# Import the reflect function from the agent_cognition module for handling agent reflection.
-from ..agent.agent_cognition.reflect import reflect
-
 # Import the Impressions class from the agent_cognition module to manage agent impressions of other characters.
 from ..agent.agent_cognition.impressions import Impressions
 
@@ -352,7 +349,7 @@ class GenerativeAgent(Character):
         self.persona = persona
         if self.use_impressions:
             # If impressions are used, create an Impressions object for the agent to track interactions.
-            self.impressions = Impressions(self.name, self.id)
+            self.impressions = Impressions(self)
         else:
             # If impressions are not used, set the impressions attribute to None.
             self.impressions = None
@@ -577,7 +574,7 @@ class GenerativeAgent(Character):
         # Check if the current game tick is the last one in the round
         if game.tick == (game.max_ticks_per_round - 1):
             # Force the agent to reflect on the round's events
-            reflect(game, self)
+            self.memory.reflect(game)
             # If the agent uses goals, evaluate them at the end of the round
             if self.use_goals:
                 self.goals.evaluate_goals(game)
@@ -740,11 +737,9 @@ class GenerativeAgent(Character):
         instance.use_impressions = data.get("use_impressions", True)
 
         # Initialize the goals for the agent if goals are enabled
-        # TODO: construct Goals using the given data
         instance.goals = Goals(instance) if instance.use_goals else None
 
         # Initialize the impressions for the agent if impressions are enabled
-        # TODO: construct Impressions using the given data
         instance.impressions = (
             Impressions(instance) if instance.use_impressions else None
         )
@@ -928,7 +923,7 @@ class DiscoveryAgent(GenerativeAgent):
         # Check if the current game tick is the last one in the round and the agent's group is not "E"
         if game.tick == (game.max_ticks_per_round - 1) and self.group != "E":
             # Force the agent to reflect on the round's events
-            reflect(game, self)
+            self.memory.reflect(game)
             # If the agent uses goals, evaluate them at the end of the round
             if self.use_goals:
                 self.goals.evaluate_goals(game)

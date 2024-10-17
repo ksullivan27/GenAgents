@@ -24,6 +24,11 @@ from text_adventure_games.utils.general import (  # Imports utility functions fo
     combine_dicts_helper,  # Function to combine dictionaries
     get_text_embedding,  # Function to obtain text embeddings
 )
+from text_adventure_games.utils.consts import get_models_config
+
+# Importing GptCallHandler to interface with OpenAI client
+from ...gpt.gpt_helpers import GptCallHandler
+
 
 # initially focus on the people that are around the current character
 
@@ -40,6 +45,25 @@ from text_adventure_games.utils.general import (  # Imports utility functions fo
 # initial is the dialogue command, subsequent is the last piece of dialogue
 
 
+# Constants for reflection output limits and retry attempts
+RETRIEVE_MAX_OUTPUT = 512  # Maximum output length for reflections
+RETRIEVE_MAX_MEMORIES = 25  # Maximum number of memories to retrieve
+RETRIEVE_RETRIES = 3  # Number of retries for reflection generation
+
+# Am I just creating a new GptCallHandler each time I pass in the model_params? Should I be? If I need different params, then probably...
+
+model_params = {
+    "api_key_org": "Helicone",
+    "model": get_models_config()["retrieve"]["model"],
+    # "max_tokens": RETRIEVE_MAX_OUTPUT,
+    # "temperature": 1,
+    # "top_p": 1,
+    # "frequency_penalty": 0,
+    # "presence_penalty": 0,
+    # "max_retries": RETRIEVE_RETRIES,
+}
+
+
 def retrieve(
     game: "Game",
     character: "Character",
@@ -49,11 +73,12 @@ def retrieve(
 ):
     """
     Retrieve relevant memory nodes for a given character based on a query.
-    This function gathers keywords, ranks memory nodes, and returns a list of descriptions or indexed descriptions.
+    This function gathers keywords, gets all memories associated with them, ranking these memory nodes and returning a
+    list of descriptions or indexed descriptions.
 
-    Using character goals, current perceptions, and possibly additional inputs,
-    parse these for keywords, get a list of memory nodes based on the keywords,
-    then calculate the retrieval score for each and return a ranked list of memories
+    Using character goals, current perceptions, and possibly additional inputs, parse these for keywords, get a list of
+    memory nodes based on the keywords, then calculate the retrieval score for each and return a ranked list of
+    memories.
 
     Args:
         game (Game): The game context in which the character exists.
@@ -70,7 +95,8 @@ def retrieve(
     # TODO: refine the inputs used to assess keywords for memory retrieval
     # TODO: WHAT IS THE QUERY STRING FOR RELEVANCY (COS SIM)?
 
-    # Gather keywords for searching relevant memory nodes based on the game and character context
+    # Gather keywords for searching relevant memory nodes based on the game and character context.
+    # This gets the keywords associated with recent memories and goals, along with the optional query.
     search_keys = gather_keywords_for_search(game, character, query)
 
     # Retrieve memory node IDs that are relevant to the gathered search keys
@@ -210,7 +236,10 @@ def calculate_node_relevance(character, memory_ids, query):
     # Check if a query is provided to determine relevance
     if query:
         # If a query is passed, compute the embedding for the query and use it to rank node relevance
-        query_embedding = get_text_embedding(query).reshape(1, -1)
+        # query_embedding = get_text_embedding(query).reshape(1, -1)
+        # TODO: Shouldn't the above use GPGptCallHandler to track embedding tokens across all instances?
+        client = GptCallHandler(**model_params)
+        query_embedding = client.generate_embeddings(query).reshape(1, -1)
         relevances = cosine_similarity(memory_embeddings, query_embedding).flatten()
     else:
         # If no query is passed, use default queries (e.g., persona, goals) to assess relevance
@@ -224,14 +253,14 @@ def calculate_node_relevance(character, memory_ids, query):
     return minmax_normalize(relevances, 0, 1)
 
 
-def get_relevant_memory_ids(seach_keys, character):
+def get_relevant_memory_ids(search_keys, character):
     """
-    Retrieve a list of memory node IDs that are relevant to the provided search keywords.
-    This function aggregates node IDs based on keyword types and their associated search words from the character's
-    memory.
+    Retrieve a list of memory node IDs that are relevant to the provided search keywords (a search keyword is associated
+    with these node IDs). This function aggregates node IDs based on keyword types and their associated search words
+    from the character's memory.
 
     Args:
-        seach_keys: A dictionary where keys are keyword types and values are lists of search words.
+        search_keys: A dictionary where keys are keyword types and values are lists of search words.
         character: The character whose memory is being queried for relevant node IDs.
 
     Returns:
@@ -242,10 +271,10 @@ def get_relevant_memory_ids(seach_keys, character):
     memory_ids = []
 
     # Iterate over each keyword type and its associated search words in the search keys
-    for kw_type, search_words in seach_keys.items():
+    for kw_type, search_words in search_keys.items():
         # For each search word, retrieve the corresponding node IDs from the character's memory
         for w in search_words:
-            node_ids = character.memory.keyword_nodes[kw_type][w]
+            node_ids = character.memory.keyword_nodes.get(kw_type, {}).get(w, [])
             # Extend the memory_ids list with the retrieved node IDs
             memory_ids.extend(node_ids)
 

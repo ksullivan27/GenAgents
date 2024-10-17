@@ -1,4 +1,5 @@
 {
+  "LLM": {
     "gpt-3.5-turbo": {
       "context": 16385,
       "max_out": 4096
@@ -111,4 +112,17 @@
       "context": 128000,
       "max_out": 6384
     }
+  },
+
+  "Embeddings": {
+    "text-embedding-3-small": {
+          "dimensions": 768
+        },
+    "text-embedding-3-large": {
+          "dimensions": 1024
+        },
+    "text-embedding-ada-002": {
+          "dimensions": 1536
+        }
+  }
   }

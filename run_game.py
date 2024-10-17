@@ -32,7 +32,8 @@ def main():
 
 
 def parse_args():
-    """Parse command-line arguments for the experiment configuration.
+    """
+    Parse command-line arguments for the experiment configuration.
 
     This function sets up the argument parser to handle user input for running an experiment. It defines required and
     optional parameters, ensuring that the necessary information is provided to execute the game correctly.
