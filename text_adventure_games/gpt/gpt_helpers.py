@@ -2,6 +2,11 @@
 Author: Samuel Thudium (sam.thudium1@gmail.com)
 """
 
+# Import future annotations for forward reference type hints.
+from __future__ import annotations
+
+print("Importing GptHelpers")
+
 # Import necessary modules and classes from the standard library and third-party packages.
 from dataclasses import asdict, dataclass, field  # For creating data classes.
 import json  # For handling JSON data.
@@ -9,28 +14,37 @@ import logging  # For logging messages.
 import os  # For interacting with the operating system.
 import re  # For regular expression operations.
 import time  # For time-related functions.
-from typing import ClassVar  # For type hinting class variables.
+from typing import ClassVar, TYPE_CHECKING  # For type hinting class variables.
 import openai  # For interacting with the OpenAI API.
 import tiktoken  # For tokenization of text.
 import httpx  # For making HTTP requests.
 import numpy as np  # Importing numpy for numerical operations and array handling.
 
 # Local imports from the project's utility modules.
-from ..utils.general import (
-    enumerate_dict_options,
-)  # Function to enumerate dictionary options.
-from ..utils.consts import get_config_file, get_assets_path
-from ..utils.general import get_logger_extras
+print(f"\t{__name__} calling imports for Consts")
+from ..utils.consts import get_config_file, get_assets_path, get_models_config
+
+print(f"\t{__name__} calling imports for General")
+from ..utils.general import enumerate_dict_options, get_logger_extras
+print(f"\t{__name__} calling imports for Prompts")
 from ..assets.prompts import (
     gpt_helper_prompts as hp,
 )  # Importing predefined prompts for GPT helper.
-from ..games import Game
-from ..things.characters import Character
 
+print(f"\t{__name__} calling imports for Logger")
 # Set up a logger for this module to log messages with the module's name.
 logger = logging.getLogger(__name__)
+print(f"\t{__name__} calling imports for Prompt Classes")
+from ..assets.prompts import prompt_classes
+
+if TYPE_CHECKING:
+    print(f"\t{__name__} calling imports for Character")
+    from ..things.characters import Character
+    print(f"\t{__name__} calling imports for Game")
+    from ..games import Game
 
 
+# TODO: Convert this into a class with all static methods (adjust GptCallHandler accordingly)
 class ClientInitializer:
     """
     ClientInitializer is responsible for managing the initialization and retrieval of OpenAI clients based on provided
@@ -38,10 +52,12 @@ class ClientInitializer:
     times the API keys have been loaded.
 
     Attributes:
-        VALID_CLIENT_PARAMS (set): A set of valid client parameters that can be used for client initialization.
         load_count (int): The number of times the API keys have been loaded.
         api_info (dict): The API key information loaded from the configuration.
         clients (dict): A dictionary storing the initialized clients for each organization.
+        
+    Class Attributes:
+        VALID_CLIENT_PARAMS (set): A set of valid client parameters that can be used for client initialization.
 
     Methods:
         get_client(org):
@@ -75,6 +91,8 @@ class ClientInitializer:
             api_info (dict): The API key information loaded from the configuration.
             clients (dict): A dictionary to store initialized clients for different organizations.
         """
+
+        print(f"-\tInitializing ClientInitializer")
 
         # Initializes a counter to track how many times the API keys have been loaded.
         self.load_count = 0
@@ -181,28 +199,6 @@ class ClientInitializer:
         if "api_key" not in params:
             raise ValueError("'api_key' must be included in your config.")
 
-        # Load the model limits from the JSON file
-        asset_path = get_assets_path()
-        model_limits_path = os.path.join(asset_path, "openai_model_limits.json")
-        with open(model_limits_path, "r") as f:
-            model_limits = json.load(f)
-
-        # Check if 'model' is present in the provided parameters
-        if "model" in params:
-            # Check if the provided model is in the model_limits under the "LLM" key
-            if params["model"] not in model_limits["LLM"]:
-                raise ValueError(
-                    f"The provided model '{params['model']}' is not a valid OpenAI LLM model."
-                )
-
-        # Check if 'embedding_model' is present in the provided parameters
-        if "embedding_model" in params:
-            # Check if the provided embedding model is in the model_limits under the "Embeddings" key
-            if params["embedding_model"] not in model_limits["Embeddings"]:
-                raise ValueError(
-                    f"The provided embedding model '{params['embedding_model']}' is not a valid OpenAI Embedding model."
-                )
-
         # If 'timeout' is not specified, set a default timeout for the connection and read/write operations.
         if "timeout" not in params:
             # Limit connection to 15 seconds and read/write to 60 seconds.
@@ -220,6 +216,29 @@ class ClientInitializer:
         # Return the dictionary containing only the validated parameters.
         return validated_params
 
+        # TODO: Add model and embedding model validation
+        # # Load the model limits from the JSON file
+        # asset_path = get_assets_path()
+        # model_limits_path = os.path.join(asset_path, "openai_model_limits.json")
+        # with open(model_limits_path, "r") as f:
+        #     model_limits = json.load(f)
+
+        # # Check if 'model' is present in the provided parameters
+        # if "model" in params:
+        #     # Check if the provided model is in the model_limits under the "LLM" key
+        #     if params["model"] not in model_limits["LLM"]:
+        #         raise ValueError(
+        #             f"The provided model '{params['model']}' is not a valid OpenAI LLM model."
+        #         )
+
+        # # Check if 'embedding_model' is present in the provided parameters
+        # if "embedding_model" in params:
+        #     # Check if the provided embedding model is in the model_limits under the "Embeddings" key
+        #     if params["embedding_model"] not in model_limits["Embeddings"]:
+        #         raise ValueError(
+        #             f"The provided embedding model '{params['embedding_model']}' is not a valid OpenAI Embedding model."
+        #         )
+
 
 @dataclass
 class GptCallHandler:
@@ -236,6 +255,8 @@ class GptCallHandler:
         output_tokens_processed (ClassVar[int]): A count of the total output tokens processed.
         embedding_tokens_processed (ClassVar[int]): A count of the total embedding tokens processed.
 
+        model_config_type (str): The configuration key for the model to be used for API calls (e.g., "act", "goals",
+        "miscellaneous", etc.).
         api_key_org (str): The organization identifier for the OpenAI API.
         model (str): The model to be used for API calls.
         embedding_model (str): The model to be used for embedding API calls.
@@ -273,12 +294,13 @@ class GptCallHandler:
     )
 
     # Instance variables that are unique to each instance of the class.
-    game: Game = None  # The game instance associated with this GPT call handler.
-    api_key_org: str = "Helicone"  # The organization identifier for the OpenAI API.
-    model: str = "gpt-4"  # The specific model to be used for API calls.
-    embedding_model: str = (
-        "text-embedding-3-small"  # The specific model to be used for embedding API calls.
-    )
+
+    model_config_type: str  # The configuration type for model being initialized
+
+    # api_key_org: str  # The organization identifier for the OpenAI API.
+    # model: str =  # The specific model to be used for API calls.
+    # embedding_model: str =  # The specific model to be used for embedding API calls.
+
     model_context_limit: int = (
         8192  # The maximum number of tokens the model can process as input.
     )
@@ -310,8 +332,12 @@ class GptCallHandler:
         the requested model limits for the instance.
         """
 
-        # Save the initial parameters of the instance by converting them to a dictionary.
-        self.original_params = self._save_init_params()
+        # Retrieve the model configuration for the specified model key.
+        self.model_config = self.get_model_config(self.model_config_type)
+
+        # Set the requested models and organizations based on the loaded limits to ensure compliance with the model's
+        # capabilities.
+        self._set_requested_models_and_organizations()
 
         # Retrieve the OpenAI client associated with the specified organization using the client handler.
         self.client = self.client_handler.get_client(self.api_key_org)
@@ -322,44 +348,74 @@ class GptCallHandler:
         # Set the requested model limits based on the loaded limits to ensure compliance with the model's capabilities.
         self._set_requested_model_limits()
 
-        def _save_init_params(self):
-            """
-            Converts the instance's attributes into a dictionary format for easy access and manipulation. This method is
-            useful for saving the initial state of the instance, allowing for later restoration or inspection of its
-            parameters.
+        # Set the requested embeddings dimensions based on the loaded limits to ensure compliance with the model's
+        # capabilities.
+        self._set_requested_embeddings_dimensions()
 
-            Returns:
-                dict: A dictionary representation of the instance's attributes.
-            """
+        # Save the initial parameters of the instance by converting them to a dictionary.
+        self.original_params = self._save_init_params()
 
-            # Converts the instance's attributes to a dictionary and returns it.
-            return asdict(self)
+    def get_model_config(self, model):
+        """
+        Retrieves the configuration settings for a specified model. If the configuration for the requested model is not
+        found, a warning is logged, and the configuration for the "miscellaneous" model is returned as a fallback.
 
-        def _load_model_limits(self):
-            """
-            Loads the model limits from a JSON file located in the assets directory. This method constructs the file
-            path, attempts to read the contents, and returns the parsed limits, handling any file-related errors that
-            may occur during the process.
+        Args:
+            model (str): The identifier of the model whose configuration is to be retrieved.
 
-            Returns:
-                dict or None: The model limits loaded from the JSON file if successful, otherwise None if the file
-                cannot be found or read.
-            """
+        Returns:
+            dict: A dictionary containing the configuration settings for the specified model, or the configuration for
+            the "miscellaneous" model if the specified model is not found.
+        """
 
-            # Retrieves the path to the assets directory and constructs the full path to the model limits JSON file.
-            assets = get_assets_path()
-            full_path = os.path.join(assets, "openai_model_limits.json")
-            try:
-                # Attempts to open the model limits JSON file and load its contents.
-                with open(full_path, "r") as f:
-                    limits = json.load(f)
-            except IOError:
-                # If the file cannot be found, print an error message indicating the bad path.
-                print(f"Bad path. Couldn't find asset at {full_path}")
-                # TODO: Determine how to handle this error case appropriately.
-            else:
-                # Return the loaded limits if the file was successfully read.
-                return limits
+        # If the model configurations are not loaded, initialize them.
+        model_configs = get_models_config()
+
+        if model in model_configs:
+            return model_configs[model]
+
+        # Log a warning and return the "miscellaneous" model configuration
+        logger.warning(f"Model configuration for {model} not found. Using 'miscellaneous' model configuration.")
+        return model_configs.get("miscellaneous")
+
+    def _save_init_params(self):
+        """
+        Converts the instance's attributes into a dictionary format for easy access and manipulation. This method is
+        useful for saving the initial state of the instance, allowing for later restoration or inspection of its
+        parameters.
+
+        Returns:
+            dict: A dictionary representation of the instance's attributes.
+        """
+
+        # Converts the instance's attributes to a dictionary and returns it.
+        return asdict(self)
+
+    def _load_model_limits(self):
+        """
+        Loads the model limits from a JSON file located in the assets directory. This method constructs the file
+        path, attempts to read the contents, and returns the parsed limits, handling any file-related errors that
+        may occur during the process.
+
+        Returns:
+            dict or None: The model limits loaded from the JSON file if successful, otherwise None if the file
+            cannot be found or read.
+        """
+
+        # Retrieves the path to the assets directory and constructs the full path to the model limits JSON file.
+        assets = get_assets_path()
+        full_path = os.path.join(assets, "openai_model_limits.json")
+        try:
+            # Attempts to open the model limits JSON file and load its contents.
+            with open(full_path, "r") as f:
+                limits = json.load(f)
+        except IOError:
+            # If the file cannot be found, print an error message indicating the bad path.
+            print(f"Bad path. Couldn't find asset at {full_path}")
+            # TODO: Determine how to handle this error case appropriately.
+        else:
+            # Return the loaded limits if the file was successfully read.
+            return limits
 
     def _set_requested_model_limits(self):
         """
@@ -398,6 +454,17 @@ class GptCallHandler:
             )
             # Set the embedding dimensions based on the retrieved info, defaulting to 768 if not specified.
             self.embedding_dimensions = embedding_info.get("dimensions", 768)
+
+    def _set_requested_models_and_organizations(self):
+        """
+        Retrieves and sets the model and organization information from the model configuration.
+        This includes the API key organization, the model to be used, and the embedding model,
+        ensuring that the instance is configured with the correct parameters for processing.
+        """
+
+        self.api_key_org = self.model_config.get("organization")
+        self.model = self.model_config.get("model")
+        self.embedding_model = self.model_config.get("embedding_model")
 
     def update_params(self, **kwargs):
         """
@@ -534,14 +601,15 @@ class GptCallHandler:
         cls.embedding_tokens_processed += add_on
 
     def generate(
-        self, system: str = None, user: str = None, messages: list = None, character: Character = None
+        self, system: str = None, user: str = None, messages: list = None, character: Character = None,
+        game: Game = None, **kwargs
     ) -> str:
         """
         Makes a call to the OpenAI API to generate a response based on the provided messages. This method can accept
         system and user messages directly or a list of messages, and it includes error handling and retry logic for
-        various API errors. Also, it optionally accepts a character argument for GPT logging purposes. This method is a
-        wrapper for making a call to the OpenAI API. It expects a function as an argument that should produce the
-        messages argument.
+        various API errors. It optionally accepts a character argument for GPT logging purposes and a game argument
+        to associate the call with a specific game instance. This method is a wrapper for making a call to the OpenAI
+        API. It expects a function as an argument that should produce the messages argument.
 
         Args:
             system (str, optional): The system message to guide the behavior of the model.
@@ -549,6 +617,9 @@ class GptCallHandler:
             messages (list, optional): A list of messages to send to the model, overriding system and user parameters if
             provided.
             character (Character, optional): The character to use for the conversation.
+            game (Game, optional): The game instance associated with this GPT call.
+            **kwargs: Additional keyword arguments to pass to the OpenAI API call.
+
         Returns:
             str: The content of the model's response.
 
@@ -578,18 +649,37 @@ class GptCallHandler:
         # Attempt to make the API call with a maximum number of retries.
         while i < self.max_retries:
             try:
-                # Make a call to the OpenAI API to generate a response based on the provided messages.
-                response = self.client.chat.completions.create(
-                    model=self.model,  # Specify the model to use for the API call.
-                    messages=messages,  # Pass the messages to the API.
-                    temperature=self.temperature,  # Set the randomness of the output.
-                    max_tokens=self.max_output_tokens,  # Limit the number of tokens in the response.
-                    top_p=self.top_p,  # Set the nucleus sampling parameter.
-                    frequency_penalty=self.frequency_penalty,  # Apply penalty for repeated tokens.
-                    presence_penalty=self.presence_penalty,  # Apply penalty for new tokens.
-                    stop=self.stop,  # Specify any stop sequences for the response.
-                )
-                # return response.choices[0].message.content  # Uncomment to return the content of the response.
+                if 'response_format' in kwargs:
+                    response = self.client.beta.chat.completions.parse(
+                        model=self.model,
+                        messages=messages,
+                        temperature=self.temperature,
+                        max_tokens=self.max_output_tokens,
+                        top_p=self.top_p,
+                        frequency_penalty=self.frequency_penalty,
+                        presence_penalty=self.presence_penalty,
+                        stop=self.stop,
+                        **kwargs
+                    )
+                    if response.choices[0].message.refusal:
+                        self._log_gpt_error("Parsed response was a refusal.")
+                        if i == self.max_retries - 1:
+                            raise Exception("Parsed response was a refusal after max retries.")
+                        i += 1
+                        continue
+                else:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=self.temperature,
+                        max_tokens=self.max_output_tokens,
+                        top_p=self.top_p,
+                        frequency_penalty=self.frequency_penalty,
+                        presence_penalty=self.presence_penalty,
+                        stop=self.stop,
+                        **kwargs
+                    )
+
             except openai.APITimeoutError as e:
                 # Handle timeout errors where the request took too long.
                 self._log_gpt_error(e)  # Log the error for debugging.
@@ -639,7 +729,8 @@ class GptCallHandler:
                 raise e  # Raise the error to stop execution.
             else:
                 # Log the GPT call details
-                self._log_gpt_call(messages, response, character)
+                if game:
+                    self._log_gpt_call(messages, response, character, game)
 
                 # If the API call is successful, update the token counts and increment the call count.
                 self._set_token_counts(
@@ -648,11 +739,19 @@ class GptCallHandler:
 
                 # print("incrementing the number of calls to GPT")  # Uncomment to log the increment action.
                 GptCallHandler.increment_calls_count()  # Increment the total number of API calls made.
-                return response.choices[
-                    0
-                ].message.content  # Return the content of the model's response.
 
-    def generate_embeddings(self, text: str, *args) -> list:
+                if 'response_format' in kwargs:
+                    return response.choices[
+                        0
+                    ].message.parsed  # Return the content of the model's response.
+                else:
+                    return response.choices[
+                        0
+                    ].message.content  # Return the content of the model's response.
+
+            i += 1
+
+    def generate_embeddings(self, text: str, *args) -> np.ndarray:
         """
         Generates embeddings for the provided text using the OpenAI client.
 
@@ -665,7 +764,7 @@ class GptCallHandler:
             *args: Additional parameters to be passed to the OpenAI client.
 
         Returns:
-            list: A NumPy array containing the generated embedding vector, or None if the input text is empty.
+            np.ndarray: A NumPy array containing the generated embedding vector, or None if the input text is empty.
 
         Raises:
             openai.AuthenticationError: If the API credentials are invalid.
@@ -762,8 +861,8 @@ class GptCallHandler:
 
         try:
             # Attempt to extract input and output token counts from the API response.
-            input_tokens = response["usage"]["prompt_tokens"]
-            output_tokens = response["usage"]["completion_tokens"]
+            input_tokens = response.usage.prompt_tokens
+            output_tokens = response.usage.completion_tokens
 
             # Update the input and output token counts in the GptCallHandler.
             GptCallHandler.update_input_token_count(input_tokens)
@@ -833,56 +932,60 @@ class GptCallHandler:
             # GptCallHandler.
             GptCallHandler.update_embedding_token_count(embedding_tokens)
 
-    def _log_gpt_call(self, messages, response, character=None):
+    def _log_gpt_call(self, messages, response, game, character=None):
         """
-        Logs the details of a GPT call, including the messages sent, the response received, and the character associated
-        with the call if provided.
+        Logs the details of a GPT call, including the messages sent, the response received, and the game and character
+        associated with the call if provided.
 
         Args:
             messages (list): A list of message dictionaries representing the conversation history.
             response (dict): The response dictionary containing the model's response details.
+            game (Game): The game instance associated with the GPT call.
             character (Character, optional): The character associated with the GPT call, used for logging.
         """
 
-        if self.game:
+        print('Running _log_gpt_call')
 
-            extras = get_logger_extras(
-                self.game, character=character, include_gpt_call_id=True, stack_level=2
+        print(f"\t{__name__} interior calling imports for Game")
+        from ..games import Game
+
+        extras = get_logger_extras(
+            game, character=character, include_gpt_call_id=True, stack_level=2
+        )
+
+        extras["type"] = "GPT Call"
+
+        # Format the messages from the log record.
+        messages_list = []
+        for message in messages:
+            messages_list.append(
+                f"{message['role'].title()}:\n{message['content']}"  # Format each message with its role.
             )
+        messages = "\n\n".join(messages_list)  # Join formatted messages with double newlines.
 
-            extras["type"] = "GPT Call"
+        choices = response["choices"][0]  # Get the first choice from the response.
 
-            # Format the messages from the log record.
-            messages_list = []
-            for message in messages:
-                messages_list.append(
-                    f"{message['role'].title()}:\n{message['content']}"  # Format each message with its role.
-                )
-            messages = "\n\n".join(messages_list)  # Join formatted messages with double newlines.
+        # Add relevant response information to the extras dictionary.
+        extras["id"] = response["id"]
+        extras["model"] = response["model"]
+        extras["messages"] = messages
+        extras["response"] = choices["message"]["content"]
+        extras["finish_reason"] = choices["finish_reason"]
 
-            choices = response["choices"][0]  # Get the first choice from the response.
+        extras["max_output_tokens"] = self.max_output_tokens
+        extras["temperature"] = self.temperature
+        extras["top_p"] = self.top_p
+        extras["frequency_penalty"] = self.frequency_penalty
+        extras["presence_penalty"] = self.presence_penalty
 
-            # Add relevant response information to the extras dictionary.
-            extras["id"] = response["id"]
-            extras["model"] = response["model"]
-            extras["messages"] = messages
-            extras["response"] = choices["message"]["content"]
-            extras["finish_reason"] = choices["finish_reason"]
+        # Extract and add token usage information to the message dictionary.
+        usage = response["usage"]
+        extras["prompt_tokens"] = usage["prompt_tokens"]
+        extras["completion_tokens"] = usage["completion_tokens"]
+        extras["total_tokens"] = usage["total_tokens"]
 
-            extras["max_output_tokens"] = self.max_output_tokens
-            extras["temperature"] = self.temperature
-            extras["top_p"] = self.top_p
-            extras["frequency_penalty"] = self.frequency_penalty
-            extras["presence_penalty"] = self.presence_penalty
-
-            # Extract and add token usage information to the message dictionary.
-            usage = response["usage"]
-            extras["prompt_tokens"] = usage["prompt_tokens"]
-            extras["completion_tokens"] = usage["completion_tokens"]
-            extras["total_tokens"] = usage["total_tokens"]
-
-            # Log the details of the GPT call, including the input and the response received.
-            self.game.gpt_call_logger.debug(f"GPT Call Details", extra=extras)
+        # Log the details of the GPT call, including the input and the response received.
+        game.gpt_call_logger.debug(f"GPT Call Details", extra=extras)
 
     def _log_gpt_error(self, e):
         """
@@ -1523,6 +1626,9 @@ def context_list_to_string(context, sep: str = "", convert_to_string: bool = Fal
     Returns:
         str: The concatenated string of messages, separated by the specified separator.
     """
+    
+    if not context:
+        return ''
 
     # If convert_to_string is True, convert each message in the context to a string and join them using the specified
     # separator.

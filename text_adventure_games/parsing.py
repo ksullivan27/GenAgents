@@ -6,6 +6,8 @@ potential for improvement using modern natural language processing. The implemen
 simple keyword matching.
 """
 
+print("Importing Parser")
+
 # Import necessary modules and types for the text adventure game parsing functionality
 from typing import TYPE_CHECKING  # For conditional type checking
 from collections import defaultdict  # For creating default dictionaries
@@ -15,22 +17,46 @@ import re  # For regular expressions
 import json  # For JSON handling
 import tiktoken  # For tokenization
 import spacy  # For natural language processing
+import nltk
+from collections import defaultdict
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet
+from inflect import engine
 from jellyfish import (
     jaro_winkler_similarity,
     levenshtein_distance,
 )  # For string similarity metrics
 
+# Download the 'wordnet' dataset.
+nltk.download("wordnet")
+
 # Importing game-related classes and functions
+print(f"\t{__name__} calling imports for Character")
 from .things import Character  # Character class from the things module
 
 if TYPE_CHECKING:
+    print(f"\t{__name__} calling type checking imports for Item and Location")
     from .things import Item, Location  # Conditional imports for type checking
+
+    print(f"\t{__name__} calling type checking imports for Thing")
     from text_adventure_games.things.base import Thing  # Base class for game objects
+
+print(f"\t{__name__} calling imports for Actions")
 from . import actions  # Importing actions module
-from .utils.general import normalize_name  # Utility function to normalize names
+
+print(f"\t{__name__} calling imports for Consts")
+from .utils.consts import get_models_config
+
+print(f"\t{__name__} calling imports for Normalize Name")
+from .utils.general import (
+    normalize_name
+)  # Utility function to normalize names
+
+print(f"\t{__name__} calling imports for ActionSequence")
 from text_adventure_games.actions.base import ActionSequence  # Action sequence handling
 
 # Importing GPT-related helper functions
+print(f"\t{__name__} calling imports for GptCallHandler")
 from .gpt.gpt_helpers import (
     GptCallHandler,  # Handler for GPT calls
     limit_context_length,  # Function to limit context length
@@ -41,6 +67,7 @@ from .gpt.gpt_helpers import (
     get_token_remainder,
 )  # Function to get remaining tokens
 
+print(f"\t{__name__} calling imports for MemoryType")
 from .agent.memory_stream import MemoryType  # Memory type for agent's memory stream
 
 
@@ -77,6 +104,8 @@ class Parser:
             game (Game): The game instance to be associated with the parser.
             echo_commands (bool, optional): Whether to print user commands. Defaults to False.
         """
+
+        print(f"-\tInitializing Parser")
 
         # Initialize a list to store the commands issued by the player
         # along with the corresponding responses provided by the game.
@@ -872,8 +901,6 @@ class GptParser(Parser):
 
         # Define a dictionary containing the parameters needed to configure the GPT model.
         model_params = {
-            "api_key_org": "Helicone",  # The organization API key for accessing the GPT service.
-            "model": "gpt-4",  # Specify the model version to use.
             "max_tokens": 400,  # Set the maximum number of tokens for the model's output.
             "temperature": 1,  # Control the randomness of the output; higher values produce more varied responses.
             "top_p": 1,  # Set the cumulative probability for token selection; 1 means all tokens are considered.
@@ -881,7 +908,7 @@ class GptParser(Parser):
         }
 
         # Create and return an instance of GptCallHandler, passing the model parameters as keyword arguments.
-        return GptCallHandler(**model_params)
+        return GptCallHandler(model_config_type="parser", **model_params)
 
     def get_handler(self):
         """
@@ -1007,28 +1034,32 @@ class GptParser(Parser):
             outcome, call_handler=self.gpt_handler, max_tokens=256
         )
 
-    def extract_keywords(self, text):
+    def extract_keywords(self, text, actions=False):
         """
-        Extracts keywords from the provided text, identifying characters and objects.
+        Extracts keywords from the provided text, identifying characters, objects, and optionally actions.
 
         This method processes the input text using natural language processing to identify and categorize keywords, such
-        as characters and objects, while filtering out common stopwords. It returns a dictionary containing sets of
-        identified characters, objects, and miscellaneous dependencies based on the text analysis.
+        as characters, objects, and actions, while filtering out common stopwords. It returns a dictionary containing sets of
+        identified characters, objects, actions, and miscellaneous dependencies based on the text analysis.
 
         Args:
             text (str): The input text from which to extract keywords.
+            actions (bool, optional): Whether to extract actions from the text. Defaults to False.
 
         Returns:
-            dict: A dictionary with keys for "characters", "objects", and "misc_deps", each containing a list of
-            identified keywords.
+            dict: A dictionary with keys for "characters", "objects", "actions", "misc_deps", and "other_named_entities",
+                  each containing a list of identified keywords.
         """
 
         # Check if the input text is empty; if so, return None.
         if not text:
             return None
 
-        # Define a set of custom stopwords to filter out common, non-informative words.
+        # Define a set of custom stopwords to filter out common, non-informative words, including basic verbs.
         custom_stopwords = {
+            "a",
+            "an",
+            "and",
             "he",
             "it",
             "i",
@@ -1043,7 +1074,77 @@ class GptParser(Parser):
             "these",
             "those",
             "them",
+            "their",
+            "my",
+            "your",
+            "our",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "being",
+            "been",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "say",
+            "says",
+            "said",
+            "go",
+            "goes",
+            "went",
+            "make",
+            "makes",
+            "made",
+            "know",
+            "knows",
+            "knew",
+            "think",
+            "thinks",
+            "thought",
+            "take",
+            "takes",
+            "took",
+            "see",
+            "sees",
+            "saw",
+            "come",
+            "comes",
+            "came",
+            "want",
+            "wants",
+            "wanted",
+            "like",
+            "likes",
+            "liked",
         }
+
+        # Import necessary packages for lemmatization and singularization.
+        from nltk.stem import WordNetLemmatizer
+        from nltk.corpus import wordnet
+        from inflect import engine
+
+        # Initialize the lemmatizer and inflect engine.
+        lemmatizer = WordNetLemmatizer()
+        inflect_engine = engine()
+
+        # Function to standardize words by converting to lowercase, lemmatizing, and singularizing.
+        def standardize_word(word):
+            word = word.lower()
+            # Try lemmatizing with different parts of speech
+            for pos in [wordnet.VERB, wordnet.NOUN, wordnet.ADJ, wordnet.ADV]:
+                lemmatized_word = lemmatizer.lemmatize(word, pos)
+                if lemmatized_word != word:  # If lemmatization changed the word
+                    word = lemmatized_word
+                    if pos == wordnet.NOUN:
+                        word = inflect_engine.singular_noun(word) or word
+                        break
+                return word
 
         # Process the input text using the natural language processing model.
         doc = self.nlp(text)
@@ -1059,39 +1160,84 @@ class GptParser(Parser):
 
             # Check if the word is a proper noun (PROPN).
             if w.pos_ in ["PROPN"]:
-                # If the proper noun has compound words, skip it.
-                compounds = [j for j in w.children if j.dep_ == "compound"]
-                if compounds:
-                    continue
+                # If the proper noun has compound words, handle the entire compound noun.
+                compound_noun = " ".join(
+                    [
+                        child.text
+                        for child in w.subtree
+                        if child.text.lower() not in custom_stopwords
+                    ]
+                ).lower()
+                exists, name = self.check_if_character_exists(compound_noun)
+                if exists:
+                    # If the character exists, add it to the characters set.
+                    keys["characters"].add(name.lower())
+                else:
+                    # If not, add the compound noun to miscellaneous dependencies.
+                    keys["misc_deps"].add(standardize_word(compound_noun))
+
+                # Process each word in the compound noun separately.
+                for part in compound_noun.split():
+                    exists, name = self.check_if_character_exists(part)
+                    if exists:
+                        # If the character exists, add it to the characters set.
+                        keys["characters"].add(name.lower())
+                    else:
+                        # If not, add the word to miscellaneous dependencies.
+                        keys["misc_deps"].add(standardize_word(part))
+                continue
 
             # Check if the word is a subject in the dependency parse.
             if "subj" in w.dep_:
-                exists, name = self.check_if_character_exists(w.text)
+                exists, name = self.check_if_character_exists(w.text.lower())
                 if exists:
                     # If the character exists, add it to the characters set.
-                    keys["characters"].add(name)
+                    keys["characters"].add(name.lower())
                 else:
                     # If not, add the word to miscellaneous dependencies.
-                    keys["misc_deps"].add(w.text)
+                    keys["misc_deps"].add(standardize_word(w.text))
 
             # Check if the word is an object in the dependency parse.
             if "obj" in w.dep_:
-                exists, name = self.check_if_character_exists(w.text)
+                exists, name = self.check_if_character_exists(w.text.lower())
                 if exists:
                     # If the character exists, add it to the characters set.
-                    keys["characters"].add(name)
+                    keys["characters"].add(name.lower())
                 else:
                     # If not, add the word to the objects set.
-                    keys["objects"].add(w.text)
+                    keys["objects"].add(standardize_word(w.text))
+
+            if actions:
+                # Check if the word is a verb (action).
+                if w.pos_ == "VERB":
+                    keys["actions"].add(standardize_word(w.text))
 
         # Iterate over named entities in the document.
         for ent in doc.ents:
             # Check if the entity is a person, organization, or geopolitical entity.
             if ent.label_ in ["PERSON", "ORG", "GPE"]:
-                exists, name = self.check_if_character_exists(ent.text)
+                exists, name = self.check_if_character_exists(ent.text.lower())
                 if exists:
                     # If the character exists, add it to the characters set.
-                    keys["characters"].add(name)
+                    keys["characters"].add(name.lower())
+                else:
+                    cleaned_entity = " ".join(
+                        [
+                            standardize_word(w.text)
+                            for word in ent.text.split()
+                            if word.lower() not in custom_stopwords
+                        ]
+                    ).lower()
+                    keys["other_named_entities"].add(cleaned_entity)
+
+        # Remove duplicates between 'misc_deps' and 'other_named_entities'
+        keys["other_named_entities"] = keys["other_named_entities"] - keys["misc_deps"]
+
+        # Remove duplicates between 'characters' and 'other_named_entities'
+        keys["other_named_entities"] = keys["other_named_entities"] - keys["characters"]
+
+        # Remove duplicates between 'objects' and 'other_named_entities'
+        keys["other_named_entities"] = keys["other_named_entities"] - keys["objects"]
 
         # Convert the sets in the keys dictionary to lists for easier handling.
         keys = {k: list(v) for k, v in keys.items()}
@@ -1711,7 +1857,7 @@ class GptParser3(GptParser2):
 
 
 # class GptParser3(GptParser2):
-#     def __init__(self, game, echo_commands=True, verbose=False, model='gpt-4'):
+#     def __init__(self, game, echo_commands=True, verbose=False, model='gpt-4o-mini'):
 #         super().__init__(game, echo_commands, verbose)
 #         self.model = model
 

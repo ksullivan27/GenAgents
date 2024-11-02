@@ -1,5 +1,7 @@
-from .base import Thing
+print("Importing Items")
 
+print(f"\t{__name__} calling imports for Things Items")   
+from .base import Thing
 
 class Item(Thing):
     """
@@ -36,6 +38,8 @@ class Item(Thing):
         Returns:
             None
         """
+        
+        print(f"-\tInitializing Item", name)
 
         # Call the constructor of the parent Thing class to initialize the name, description, properties, and command
         # attributes.

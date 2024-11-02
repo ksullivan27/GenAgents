@@ -5,12 +5,13 @@ File: agent/persona.py
 Description: Defines the Persona of an agent
 """
 
+print("Importing Persona")
+
 # local imports
 from text_adventure_games.gpt.gpt_agent_setup import summarize_agent_facts
 from text_adventure_games.managers.scales import TraitScale
 import json
 import os
-
 
 class Persona:
     """
@@ -346,8 +347,8 @@ class Persona:
 
         # Append additional guidance on how the speaking style should influence the agent's communication.
         style += (
-            """ Use this information to guide how they speak, in terms of tone, word choice, sentence structure, """
-            """phrasing, terseness, verbosity, and overall demeanor."""
+            "Use this information to guide how they speak, in terms of tone, word choice, sentence structure, "
+            "phrasing, terseness, verbosity, and overall demeanor."
         )
 
         # Store the generated speaking style in the agent's attributes for future reference.

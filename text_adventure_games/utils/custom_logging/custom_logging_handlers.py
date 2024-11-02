@@ -364,3 +364,21 @@ class QueueListenerHandler(QueueHandler):
         # This indexing operation evaluates the list, ensuring that all elements are properly converted.
         # Return the evaluated list of handlers.
         return [handlers_list[i] for i in range(len(handlers_list))]
+
+    def print_handlers(self):
+        """
+        Prints the details of the handlers managed by the QueueListenerHandler.
+        This method iterates over the handlers and prints their type and file path if applicable.
+
+        Returns:
+            None
+        """
+        # Access the handlers from the listener
+        print("Handlers managed by QueueListenerHandler:")
+        for handler in self._listener.handlers:
+            print(f"Handler: {handler}")
+            print(f"Handler type: {type(handler)}")
+            if isinstance(handler, logging.FileHandler):
+                print(f"FileHandler is saving JSON file at: {handler.baseFilename}")
+            else:
+                print("This handler does not save to a file.")

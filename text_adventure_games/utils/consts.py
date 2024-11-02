@@ -5,6 +5,8 @@ File: consts.py
 Description: get/set any necessary API keys, constant values, etc.
 """
 
+print("Importing Consts")
+
 # Importing the json module for working with JSON data, including parsing and serialization.
 import json
 
@@ -18,6 +20,7 @@ from os import PathLike
 from typing import Union
 
 # Import the logging module to enable logging functionality within this script
+print(f"\t{__name__} calling imports for logging")
 import logging
 
 # Set up the logger at the module level
@@ -149,25 +152,34 @@ def get_openai_api_key(organization):
 def get_models_config():
     """
     Retrieves the models configuration from the configuration file. This function
-    checks the configuration for the 'models' section and returns it.
+    checks for the presence of the 'models' section and validates the configuration for each model.
 
     Returns:
-        dict: A dictionary containing the models configuration, or None if not found.
+        dict: A dictionary containing the models configuration, including model names and their associated
+        organization (and optionally embedding model), or raises a ValueError if the configuration is missing or
+        invalid.
 
     Raises:
-        None
+        ValueError: If the 'organizations' configuration is missing or empty, if any organization lacks an 'api_key',
+        or if the 'models' section is not found in the configuration file.
     """
 
     # Retrieve the configuration variables from the configuration file.
     config_vars = get_config_file()
+
+    if "organizations" not in config_vars or not config_vars["organizations"]:
+        raise ValueError("No 'organizations' configuration found in the config file or it is empty.")
+
+    for org, details in config_vars["organizations"].items():
+        if not details.get("api_key"):
+            raise ValueError(f"The organization '{org}' does not have an 'api_key' configured.")
 
     # Get the 'models' section from the configuration.
     models_config = config_vars.get("models", None)
 
     if models_config is None:
         # Return None if the file doesn't include "models".
-        print("No 'models' configuration found in the config file.")
-        return None
+        raise ValueError("No 'models' configuration found in the config file.")
 
     # Ensure that all required model types are present
     required_models = [
@@ -178,18 +190,73 @@ def get_models_config():
         "retrieve",
         "dialogue",
         "vote",
+        "parser",
+        "persona_creation",
+        "miscellaneous",
     ]
-    # Set up a default value if any are missing.
-    default_model = "gpt-4o-mini"
+
+    # Load the model limits from the JSON file
+    asset_path = get_assets_path()
+    model_limits_path = os.path.join(asset_path, "openai_model_limits.json")
+    with open(model_limits_path, "r") as f:
+        model_limits = json.load(f)
+
+    output_models_config = {}
+
+    # Set up default values if any are missing.
+    default_model = models_config.get("miscellaneous", {}).get("model", "gpt-4o-mini")
+    default_organization = next(iter(config_vars.get("organizations", {})), None)
+    default_embedding_model = "text-embedding-3-small"
+
+    # Iterate over the required models and check if they are configured in the models_config dictionary.
     for model in required_models:
+        # If the model is not configured, log a warning and set the default values.
         if model not in models_config:
             logger.warning(
-                f"'{model}' model configuration is missing. Defaulting to {default_model}."
+                f"'{model}' model configuration is missing. Defaulting to {default_model} using {default_organization} API key."
             )
-            models_config[model] = {"model": default_model}  # Set a default value
+            output_models_config[model] = {
+                "model": default_model,
+                "organization": default_organization,
+                "embedding_model": default_embedding_model,
+            }
+        else:
+            # Check if the model is a valid OpenAI LLM model.
+            if models_config[model].get("model", default_model) not in model_limits["LLM"].keys():
+                raise ValueError(
+                    f"The provided model '{models_config[model].get('model', default_model)}' "
+                    "is not a valid OpenAI LLM model (not found in openai_model_limits.json)."
+                )
 
-    return models_config
+            # Check if the model is a valid OpenAI Embedding model.
+            elif models_config[model].get(
+                "embedding_model", default_embedding_model
+            ) not in list(model_limits["Embeddings"].keys()):
+                raise ValueError(
+                    f"The provided embedding model '{models_config[model].get('embedding_model', default_embedding_model)}'"
+                    f" is not a valid OpenAI Embedding model (not found in openai_model_limits.json)."
+                )
 
+            # If the model is valid, add it to the output_models_config dictionary with the appropriate values.
+            output_models_config[model] = {
+                "model": models_config[model].get("model", default_model),
+                "organization": models_config[model].get("organization", default_organization),
+                "embedding_model": models_config[model].get("embedding_model", default_embedding_model),
+            }
+
+            # If the organization is not specified, log a warning and set the default value.
+            if "organization" not in models_config[model]:
+                logger.warning(
+                    f"Organization not specified for '{model}' model. Defaulting to {default_organization}."
+                )
+
+            # If the model is not specified, log a warning and set the default value.
+            if "model" not in models_config[model]:
+                logger.warning(
+                    f"Model not specified for '{model}' model. Defaulting to {default_model}."
+                )
+
+    return output_models_config
 
 def get_helicone_base_path(organization="Helicone"):
     """

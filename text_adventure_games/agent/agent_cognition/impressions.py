@@ -11,6 +11,9 @@ Description: defines how agents store interpersonal impressions and theory-of-mi
              However, if a player comes across a new target, all relevant memories to the target will be pulled.
 
 """
+
+print("Importing Impressions")
+
 # Importing the inspect module, which provides useful functions to get information about live objects
 import inspect
 
@@ -25,6 +28,8 @@ from typing import (
 from text_adventure_games.assets.prompts import (
     impressions_prompts as ip,
 )  # Import prompts for impressions
+
+print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (  # Import helper functions for GPT interactions
     limit_context_length,  # Function to limit the context length of prompts
     get_token_remainder,  # Function to get the remaining tokens available
@@ -32,24 +37,28 @@ from text_adventure_games.gpt.gpt_helpers import (  # Import helper functions fo
     context_list_to_string,  # Function to convert a list of contexts to a string
     GptCallHandler,  # Class to handle GPT calls
 )
-from text_adventure_games.agent.agent_cognition import (
-    retrieve,
-)  # Import retrieve function for agent cognition
+
+print(f"\t{__name__} calling imports for Retrieve")
+from .retrieve import Retrieve  # Import Retrieve class for agent cognition
+
+print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import (
     get_logger_extras,
 )  # Import utility for logging extras
 
+print(f"\t{__name__} calling imports for Consts")
 # Import the get_models_config function from the consts module in the utils package.
 # This function is used to retrieve the configuration for different models used in the game.
 from text_adventure_games.utils.consts import get_models_config
 
 if TYPE_CHECKING:  # Check if type checking is enabled
+    print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Import Game class for type hints
+
+    print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import (
         Character,
     )  # Import Character class for type hints
-
-IMPRESSION_MAX_OUTPUT = 512  # Define maximum output length for impressions
 
 
 class Impressions:
@@ -62,14 +71,39 @@ class Impressions:
         name (str): The name of the agent.
         id (int): The unique identifier of the agent.
         last_target (Character): The last target character for which an impression was created.
-        gpt_handler (GptCallHandler): Handler for GPT calls to generate impressions.
         token_offset (int): Offset for token calculations in GPT prompts.
         offset_pad (int): Additional padding for token limits.
+
+    Class Variables:
+        gpt_handler (GptCallHandler): Handler for GPT calls to generate impressions.
 
     Args:
         name (str): The name of the agent.
         id (int): The unique identifier of the agent.
     """
+
+    gpt_handler = None  # Class-level attribute to store the shared GPT handler
+    # Define the parameters for the GPT model configuration
+    model_params = {
+        "max_output_tokens": 512,  # Maximum number of tokens for the output
+        "temperature": 1,  # Sampling temperature for randomness in output
+        "top_p": 1,  # Nucleus sampling parameter
+        "max_retries": 5,  # Maximum number of retries for API calls
+    }
+
+    @classmethod
+    def initialize_gpt_handler(cls):
+        """
+        Initialize the shared GptCallHandler if it hasn't been created yet.
+        """
+
+        print(f"-\tImpressions Module is initializing GptCallHandler")
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        if cls.gpt_handler is None:
+            cls.gpt_handler = GptCallHandler(
+                model_config_type="impressions", **cls.model_params
+            )
 
     def __init__(self, character: "Character"):
         """
@@ -87,6 +121,8 @@ class Impressions:
             character (Character): The character associated with this impressions object.
         """
 
+        print(f"-\tInitializing Impressions")
+
         # Initialize a dictionary to store impressions, with default values as empty dictionaries
         self.impressions = defaultdict(dict)
 
@@ -96,38 +132,14 @@ class Impressions:
         # Initialize the last target character to None
         self.last_target = None
 
-        # Set up the GPT call handler for generating impressions
-        self.gpt_handler = self._set_up_gpt()
+        # Initialize the GPT handler if it hasn't been set up yet
+        Impressions.initialize_gpt_handler()
 
         # Define the token offset for GPT prompts, accounting for variable tokens
         self.token_offset = 50
 
         # Set an additional padding for token calculations
         self.offset_pad = 5
-
-    def _set_up_gpt(self):
-        """
-        Configures and initializes the GPT call handler with specified parameters.
-        This method sets up the necessary model parameters for generating impressions using the GPT model.
-
-        Returns:
-            GptCallHandler: An instance of the GPT call handler configured with the specified parameters.
-        """
-
-        # Define the parameters for the GPT model configuration
-        model_params = {
-            "api_key_org": "Helicone",  # Organization API key for authentication
-            "model": get_models_config()["impressions"][
-                "model"
-            ],  # Specify the GPT model version to use
-            "max_tokens": IMPRESSION_MAX_OUTPUT,  # Maximum number of tokens for the output
-            "temperature": 1,  # Sampling temperature for randomness in output
-            "top_p": 1,  # Nucleus sampling parameter
-            "max_retries": 5,  # Maximum number of retries for API calls
-        }
-
-        # Return an instance of the GptCallHandler initialized with the specified parameters
-        return GptCallHandler(**model_params)
 
     def _log_impression(self, game, target, message):
         """
@@ -219,9 +231,7 @@ class Impressions:
         # Return the list of character impressions
         return char_impressions
 
-    def update_impression(
-        self, game: "Game", target: "Character"
-    ) -> None:
+    def update_impression(self, game: "Game", target: "Character") -> None:
         """
         Conditionally updates the impression of a target character based on the game's state.
         This method checks if the impression needs to be updated based on its age and the current game ticks, and
@@ -258,9 +268,7 @@ class Impressions:
             # Trigger the process to set a new impression for the target character
             self.set_impression(game, target)
 
-    def set_impression(
-        self, game: "Game", target: "Character"
-    ) -> None:
+    def set_impression(self, game: "Game", target: "Character") -> None:
         """
         Creates and logs an impression of a target character based on the current game context.
         This method generates prompts for the GPT model, retrieves the impression, and updates the internal record of
@@ -319,7 +327,9 @@ class Impressions:
         """
 
         # Generate an impression using the GPT handler with the provided system and user prompts
-        impression = self.gpt_handler.generate(system=system_prompt, user=user_prompt, character=self.character)
+        impression = self.gpt_handler.generate(
+            system=system_prompt, user=user_prompt, character=self.character
+        )
 
         # Check if the result is a tuple, indicating a potential error due to exceeding token limits
         if isinstance(impression, tuple):
@@ -352,9 +362,7 @@ class Impressions:
         """
 
         # Generate the system prompt and count the number of tokens used in the system prompt
-        system_prompt, sys_token_count = self.build_system_prompt(
-            game, target.name
-        )
+        system_prompt, sys_token_count = self.build_system_prompt(game, target.name)
 
         # Calculate the total number of tokens consumed by adding the system token count and the current token offset
         consumed_tokens = sys_token_count + self.token_offset
@@ -381,8 +389,15 @@ class Impressions:
             tuple: A tuple containing the constructed system prompt and the token count of the prompt.
         """
 
+        # Import Character from text_adventure_games.things.characters (inside the function to avoid circular imports)
+
+        print(f"\t{__name__} interiorcalling imports for Character")
+        from text_adventure_games.things.characters import Character
+
         # Retrieve the standard information of the character, excluding perceptions
-        system_prompt = self.character.get_standard_info(game, include_perceptions=False)
+        system_prompt = self.character.get_standard_info(
+            game, include_perceptions=False
+        )
 
         # Append the formatted prompt for generating impressions, including the target character's name
         system_prompt += ip.gpt_impressions_prompt.format(target_name=target_name)
@@ -409,6 +424,11 @@ class Impressions:
         Returns:
             str: The constructed user message for the GPT model.
         """
+
+        # Import Character from text_adventure_games.things.characters (inside the function to avoid circular imports)
+
+        print(f"\t{__name__} interior calling imports for Character")
+        from text_adventure_games.things.characters import Character
 
         # Create a list containing a string that identifies the target person by name
         always_included = ["Target person: {t}\n\n".format(t=target.name)]
@@ -444,11 +464,11 @@ class Impressions:
         else:
             # If no impression exists, retrieve the most relevant memories about the target character
             # TODO: Consider improving this query for better relevance
-            context_list = retrieve.retrieve(
-                game,
-                self.character,
-                n=-1,
+            context_list = Retrieve.retrieve(
+                game=game,
+                character=self.character,
                 query=f"I want to remember everything I know about {target.name}",
+                n=-1,
             )
             self.chronological = False  # Set the chronological flag to False
             target_impression_tkns = 0  # No tokens to count for the impression

@@ -1,29 +1,43 @@
+print("Importing Characters")
+
 import os
 from typing import List, Union
 
 # Local imports from the current package and parent packages to access various classes and functions.
 # Import the base class 'Thing' from the base module.
+print(f"\t{__name__} calling imports for Base Thing")
 from .base import Thing
 
 # Import the 'Item' class from the items module to represent items in the game.
+print(f"\t{__name__} calling imports for Items")
 from .items import Item
 
 # Import MemoryStream and MemoryType from the agent.memory_stream module for managing agent memory.
+print(f"\t{__name__} calling imports for MemoryStream and MemoryType")
 from ..agent.memory_stream import MemoryStream, MemoryType
 
 # Import the Act class from the agent_cognition module to handle actions performed by agents.
+print(f"\t{__name__} calling imports for Act")
 from ..agent.agent_cognition.act import Act
 
+# Import the Reflect class from the agent_cognition module to handle reflection operations.
+print(f"\t{__name__} calling imports for Reflect")
+from ..agent.agent_cognition.reflect import Reflect
+
 # Import the Impressions class from the agent_cognition module to manage agent impressions of other characters.
+print(f"\t{__name__} calling imports for Impressions")
 from ..agent.agent_cognition.impressions import Impressions
 
 # Import the Goals class from the agent_cognition module to manage agent goals.
+print(f"\t{__name__} calling imports for Goals")
 from ..agent.agent_cognition.goals import Goals
 
 # Import the perceive_location function from the agent_cognition module to help agents perceive their surroundings.
+print(f"\t{__name__} calling imports for Perceive")
 from ..agent.agent_cognition.perceive import perceive_location
 
 # Import the context_list_to_string function from the gpt_helpers module to convert context lists into string format.
+print(f"\t{__name__} calling imports for Context List to String")
 from ..gpt.gpt_helpers import context_list_to_string
 
 
@@ -35,7 +49,6 @@ GROUP_MAPPING = {
     "D": (True, True),
     "E": (False, False),
 }
-
 
 class Character(Thing):
     """
@@ -71,6 +84,8 @@ class Character(Thing):
         Returns:
             None
         """
+        
+        print(f"-\tInitializing Character", name)
 
         # Call the initializer of the parent class (Thing) to set up the name and description attributes for the
         # character.
@@ -191,6 +206,8 @@ class Character(Thing):
         Returns:
             Character: An instance of the character class populated with the provided data.
         """
+        
+        print(f"-\tFrom Primitive: Character {data['name']}")
 
         # Create a new instance of the character class using the provided name, description, and persona
         instance = cls(data["name"], data["description"], data["persona"])
@@ -335,6 +352,8 @@ class GenerativeAgent(Character):
             None
         """
 
+        print(f"-\tInitializing Generative Agent {persona.facts['Name']}")
+
         # Call the parent class's constructor to initialize the character with the persona's name, description, and
         # summary.
         super().__init__(
@@ -343,16 +362,19 @@ class GenerativeAgent(Character):
 
         # Set the cognitive group for the agent and determine if goals and impressions will be used based on the group.
         self.group = group
+        
+        print("GROUP:", self.group)
+        
         self.use_goals, self.use_impressions = GROUP_MAPPING[self.group]
+        
+        print("USE GOALS:", self.use_goals)
+        print("USE IMPRESSIONS:", self.use_impressions)
 
         # Assign the agent's persona and initialize impressions and goals based on cognitive settings.
         self.persona = persona
-        if self.use_impressions:
-            # If impressions are used, create an Impressions object for the agent to track interactions.
-            self.impressions = Impressions(self)
-        else:
-            # If impressions are not used, set the impressions attribute to None.
-            self.impressions = None
+        
+        # Initialize the impressions for the agent based on whether impressions are used.
+        self.impressions = Impressions(self) if self.use_impressions else None
 
         # Initialize the goals for the agent based on whether goals are used.
         self.goals = Goals(self) if self.use_goals else None
@@ -574,7 +596,9 @@ class GenerativeAgent(Character):
         # Check if the current game tick is the last one in the round
         if game.tick == (game.max_ticks_per_round - 1):
             # Force the agent to reflect on the round's events
-            self.memory.reflect(game)
+            # TODO: Fix circular import
+            # self.memory.reflect(game)
+            Reflect.reflect(game, self)
             # If the agent uses goals, evaluate them at the end of the round
             if self.use_goals:
                 self.goals.evaluate_goals(game)
@@ -683,7 +707,10 @@ class GenerativeAgent(Character):
         # Add the agent's memory stream observations to the data representation
         thing_data["memory_stream"] = self.memory.get_observations_after_round(0, True)
 
-        thing_data["group"] = self.group
+        # Check if the agent has a group assigned
+        # If so, add the group information to the thing_data dictionary
+        if self.group:
+            thing_data["group"] = self.group
 
         # If the agent has goals, include them in the data representation
         if self.goals:
@@ -701,7 +728,11 @@ class GenerativeAgent(Character):
             thing_data["use_impressions"] = False
             thing_data["impressions"] = None
 
-        thing_data["search_idol_count"] = self.idol_search_count
+        # # Add the number of idol searches performed by the agent to the data representation
+        # if self.idol_search_count:
+        #     thing_data["search_idol_count"] = self.idol_search_count
+        # else:
+        #     thing_data["search_idol_count"] = 0
 
     @classmethod
     def from_primitive(cls, data):
@@ -720,6 +751,8 @@ class GenerativeAgent(Character):
         Returns:
             Character: A fully constructed character instance with initialized attributes.
         """
+        
+        print(f"-\tFrom Primitive: Character {data['name']}")
 
         # Create a new instance of the character class using the provided name, description, and persona
         instance = cls(data["name"], data["description"], data["persona"])
@@ -923,7 +956,9 @@ class DiscoveryAgent(GenerativeAgent):
         # Check if the current game tick is the last one in the round and the agent's group is not "E"
         if game.tick == (game.max_ticks_per_round - 1) and self.group != "E":
             # Force the agent to reflect on the round's events
-            self.memory.reflect(game)
+            # TODO: Fix circular import
+            # self.memory.reflect(game)
+            Reflect.reflect(game, self)
             # If the agent uses goals, evaluate them at the end of the round
             if self.use_goals:
                 self.goals.evaluate_goals(game)
