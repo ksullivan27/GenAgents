@@ -4,6 +4,9 @@ import os  # For interacting with the operating system
 from itertools import cycle  # For creating an iterator that cycles through an iterable
 from typing import override
 
+# Import TYPE_CHECKING to allow for type hints without circular imports.
+from typing import TYPE_CHECKING, Union, List, Set, Dict
+
 # Import modules from the text_adventure_games package
 from text_adventure_games import games, things
 from text_adventure_games.agent.persona import (
@@ -424,6 +427,96 @@ class DiscoveryGame(games.SurvivorGame):
         return world_info_prompt.discovery_basic_goal.format(**params)
 
 
+class BoardroomGame(games.SurvivorGame):
+    """
+    Represents a classic game setup for the SurvivorGame.
+
+    This class initializes a game with specified parameters, allowing for customization of player characters, actions,
+    and game settings.
+
+    Args:
+        start_at (things.Location): The starting location of the game.
+        player (things.Character): The main character controlled by the player.
+        characters (list, optional): A list of additional characters in the game. Defaults to None.
+        custom_actions (list, optional): A list of custom actions available in the game. Defaults to None.
+        max_ticks (int, optional): The maximum number of game ticks. Defaults to 5.
+        num_finalists (int, optional): The number of finalists at the end of the game. Defaults to 2.
+        experiment_name (str, optional): The name of the experiment. Defaults to "exp1".
+        experiment_id (int, optional): The identifier for the experiment. Defaults to 1.
+    """
+
+    def __init__(
+        self,
+        start_at: things.Location,
+        player: things.Character,
+        characters=None,
+        custom_actions=None,
+        max_ticks=5,
+        experiment_name="exp1",
+        experiment_id=1,
+    ):
+        """
+        Initializes the game with specified parameters.
+
+        This constructor sets up the game environment, including the starting location, player character, and various
+        game settings. It allows for customization of characters, actions, and experiment details.
+
+        Args:
+            start_at (things.Location): The starting location of the game.
+            player (things.Character): The main character controlled by the player.
+            characters (list, optional): A list of additional characters in the game. Defaults to None.
+            custom_actions (list, optional): A list of custom actions available in the game. Defaults to None.
+            max_ticks (int, optional): The maximum number of game ticks. Defaults to 5.
+            num_finalists (int, optional): The number of finalists at the end of the game. Defaults to 2.
+            experiment_name (str, optional): The name of the experiment. Defaults to "exp1".
+            experiment_id (int, optional): The identifier for the experiment. Defaults to 1.
+        """
+
+        # Call the initializer of the parent class to set up the game with the provided parameters.
+        super().__init__(
+            start_at,  # The starting location of the game.
+            player,  # The main character controlled by the player.
+            characters,  # Additional characters in the game (if any).
+            custom_actions,  # Custom actions available in the game (if any).
+            max_ticks=max_ticks,  # Maximum number of game ticks allowed.
+            experiment_name=experiment_name,  # Name of the experiment.
+            experiment_id=experiment_id,
+        )  # Identifier for the experiment.
+
+    @override
+    def update_world_info(self):
+        """
+        Updates the world information for the boardroom game.
+
+        This method gathers various parameters related to the current state of the game, including the meeting name,
+        topic, and participants. It formats this information into a structured string for use in the game's world
+        information display.
+
+        Returns:
+            None
+        """
+
+        params = {
+            "meeting_name": self.meeting_name,
+            "topic": self.topic,
+            "characters": ", ".join(
+                [
+                    f"{c.name}"
+                    for c in self.characters.values()
+                    if (c.id != self.player.id)
+                ]
+            ),
+            "minutes_left": 90,  #TODO: calculate minutes remaining from generated words (using 200 tokens per minute)
+        }
+        self.world_info = world_info_prompt.boardroom_world_info.format(**params)
+
+    @override
+    def game_loop(self):
+        print("NEED TO IMPLEMENT GAME LOOP")
+        return
+        # pass  #TODO: implement this
+
+
 def build_exploration(
     experiment_name: str = "exp1",
     experiment_id: int = 1,
@@ -721,6 +814,98 @@ def build_classic(
         custom_actions=None,  # Custom actions for the game (if any).
         max_ticks=max_ticks,  # Maximum number of game ticks.
         num_finalists=num_finalists,  # Number of finalists at the end of the game.
+        experiment_name=experiment_name,  # Name of the experiment.
+        experiment_id=experiment_id,  # Identifier for the experiment.
+    )
+
+
+# TODO: This is a placeholder for the boardroom game. It still needs to be properly implemented.
+def build_boardroom(
+    experiment_name: str = "exp1",
+    experiment_id: int = 1,
+    num_characters: int = 2,  # TODO: Add the actual number of characters
+    max_ticks: int = 1,  # TODO: Add the actual number of ticks
+    personas_path: str = ".",
+) -> games.Game:
+    """
+    Builds and initializes a classic game.
+
+    This function sets up the game environment by creating locations, assigning characters, and configuring game
+    parameters based on the provided settings. It returns an instance of the ClassicGame configured with the specified
+    parameters.
+
+    Args:
+        experiment_name (str, optional): The name of the experiment. Defaults to "exp1".
+        experiment_id (int, optional): The identifier for the experiment. Defaults to 1.
+        num_characters (int, optional): The number of characters in the game. Defaults to 10.
+        max_ticks (int, optional): The maximum number of game ticks. Defaults to 1.
+        personas_path (str, optional): The path to the character personas. Defaults to ".".
+
+    Returns:
+        games.Game: An instance of the ClassicGame configured with the specified parameters.
+    """
+
+    # Build the valid starting locations for the game.
+    locs = build_boardroom_locations()  # Create game locations.
+    # Initialize an empty list to hold character instances.
+    characters = []
+
+    # Assign all characters to the boardroom location.
+    location_assignments = [locs.get("boardroom")] * num_characters
+
+    # Assign all characters to group D.
+    group_assignments = ['D' for _ in range(num_characters)]
+    # Set the starting location for the game.
+    start_at = location_assignments[0]
+
+    # Collect character data from the specified personas path.
+    character_jsons = collect_game_characters(personas_path)
+
+    print("CHARACTER JSONS:", character_jsons)
+
+    # Ensure the character_jsons list has enough entries by adding None if necessary.
+    if len(character_jsons) < num_characters:
+        diff = num_characters - len(character_jsons)  # Calculate the difference.
+        character_jsons.extend([None] * diff)  # Extend the list with None values.
+
+    # Create character instances based on the collected persona data.
+    for i, filename in enumerate(character_jsons):
+        if not filename:
+            # Create a default persona if no filename is provided.
+            persona = build_agent(
+                "An quirky contestant that is must see TV on a reality show.",
+                facts_new=True,
+            )
+        else:
+            # Import the persona from the file.
+            persona = Persona.import_persona(filename)
+
+        # Create a character instance with the persona and assigned group.
+        character = GenerativeAgent(persona, group_assignments[i])
+
+        print("PERSONA:", persona)
+        print("GROUP:", group_assignments[i])
+        print("CHARACTER:", character)
+
+        location = location_assignments[i]
+        location.add_character(character)
+        characters.append(character)
+
+        # Print the character's starting information.
+        print(
+            f"Character {character.name} starts at {location.name} and belongs to Group {group_assignments[i]}"
+        )
+
+    # Remove the first character from the list to designate them as the player.
+    player = characters.pop(0)
+
+    # Return an instance of the BoardroomGame with the specified parameters.
+    return BoardroomGame(
+        start_at,  # The starting location of the game.
+        player,  # The player character.
+        characters,  # The list of other characters in the game.
+        custom_actions=None,  # Custom actions for the game (if any).
+        max_ticks=max_ticks,  # Maximum number of game ticks.
         experiment_name=experiment_name,  # Name of the experiment.
         experiment_id=experiment_id,  # Identifier for the experiment.
     )
@@ -1173,3 +1358,33 @@ def build_mini_discovery(
         experiment_name=experiment_name,
         experiment_id=experiment_id,
     )
+
+
+def build_boardroom_locations():
+    """
+    Builds and initializes the game locations.
+
+    This function creates various locations within the game, sets their properties, and establishes connections between
+    them. It also adds items to specific locations and returns a dictionary of the initialized locations for use in the
+    game.
+
+    Returns:
+        dict: A dictionary containing the initialized game locations, including camp, cliffs, beach, ocean, jungle path,
+        and well.
+    """
+
+    # Create various locations for the game with descriptions.
+    boardroom = things.Location(
+        "Boardroom", "the boardroom where the meetings take place."
+    )  # The main base for the tribe.
+
+    # Set properties for the jungle location.
+    # There are no properties for the boardroom
+
+    # Add a connections
+    # There are no connections for the boardroom
+
+    # Return a dictionary of all initialized locations, ensuring the jungle is not a starting point.
+    return {
+        "boardroom": boardroom,
+    }

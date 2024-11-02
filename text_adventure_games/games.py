@@ -1,3 +1,5 @@
+print("Importing Game")
+
 import json
 import inspect
 from collections import defaultdict, namedtuple
@@ -7,14 +9,29 @@ from numpy.random import permutation
 import dill as pickle
 import concurrent.futures
 
+print(f"\t{__name__} calling imports for MemoryType")
 from .agent.memory_stream import MemoryType
+
+print(f"\t{__name__} calling imports for Location and Character")
 from .things import Location, Character
+
+print(f"\t{__name__} calling imports for Parsing, Actions, and Blocks")
 from . import parsing, actions, blocks
+
+print(f"\t{__name__} calling imports for Logger")
 from .utils.custom_logging import logger
+
+print(f"\t{__name__} calling imports for VotingSession and JuryVotingSession")
 from .agent.agent_cognition.vote import VotingSession, JuryVotingSession
 from .assets.prompts import vote_prompt, world_info_prompt
+
+print(f"\t{__name__} calling imports for Consts")
 from .utils.consts import get_output_logs_path
+
+print(f"\t{__name__} calling imports for General")
 from .utils.general import create_dirs, get_logger_extras
+
+print(f"\t{__name__} calling imports for GptCallHandler")
 from .gpt.gpt_helpers import GptCallHandler
 
 
@@ -52,6 +69,8 @@ class Game:
         Returns:
             None
         """
+
+        print(f"-\tInitializing Game")
 
         self.start_at = start_at
         self.player = player
@@ -1041,15 +1060,17 @@ class SurvivorGame(Game):
             experiment_name=experiment_name,
             simulation_id=experiment_id,
             logfile_prefix="sim",
-            overwrite=True,
+            overwrite=False,
         )
+        print("GAME LOGGER:", game_logger)
         gpt_call_logger = logger.CustomLogger(
             name="gpt_call_logger",
             experiment_name=game_logger.get_experiment_name(),
-            simulation_id=game_logger.get_simulation_id,
+            simulation_id=game_logger.get_simulation_id(),
             logfile_prefix="gpt_calls",
-            overwrite=False,
+            overwrite=True,
         )
+        print("GPT CALL LOGGER:", gpt_call_logger)
         self.logger = game_logger.get_logger()
         self.gpt_call_logger = gpt_call_logger.get_logger()
         self.experiment_name = experiment_name  # Store the experiment name
@@ -1214,18 +1235,6 @@ class SurvivorGame(Game):
             self.update_world_info()
             for character in self.characters.values():
                 character.generate_goals(self)
-
-        # # TODO: I need to test if the code below correctly gets goals in parallel
-        # # if it is the beginning of a round, everyone should make goals
-        # if self.tick == 0:
-
-        #     self.update_world_info()
-
-        #     def generate_goals_for_character(character):
-        #         character.generate_goals(self)
-
-        #     with concurrent.futures.ThreadPoolExecutor() as executor:
-        #         executor.map(generate_goals_for_character, self.characters.values())
 
     def turn_handler(self, character):
         """
@@ -1751,6 +1760,9 @@ class SurvivorGame(Game):
 
     def _log_starting_locs(self):
         """
+        The `_log_starting_locs` function logs the starting locations of all characters in the game by iterating through each character and recording their starting point using the logger for debugging purposes.
+        """
+        """
         Logs the starting locations of all characters in the game. This method iterates through each character,
         constructs a log message indicating their starting point, and records it using the logger for debugging
         purposes.
@@ -1859,93 +1871,3 @@ class SurvivorGame(Game):
 
             # Write the character goal scores to the JSON file
             json.dump(output, f, indent=4)
-
-
-class BoardroomGame(Game):
-    """
-    Represents a game setup for the BoardroomGame.
-
-    This class initializes a game with specified parameters, allowing for customization of player characters, actions,
-    and game settings.
-
-    Args:
-        player (things.Character): The main character controlled by the player.
-    """
-
-    def __init__(
-        self,
-        start_at: Location,
-        player: Character,
-        characters=None,
-        custom_actions=None,
-        max_ticks: int = 1,
-        # num_finalists: int = 2,
-        experiment_name: str = "exp1",
-        experiment_id: int = 1,
-        end_state_check: Literal["on_round", "on_tick", "on_action"] = "on_round",
-    ):
-        """
-        Initializes a SurvivorGame instance with a starting location, a player character, and optional non-player
-        characters and custom actions. This constructor method sets up the game environment, including game tracking
-        variables, logging, and the initial state of the game.
-
-        Args:
-            start_at (Location): The starting location of the player in the game.
-            player (Character): The player character controlled by the user.
-            characters (list, optional): A list of additional characters (NPCs) to include in the game.
-            custom_actions (list, optional): A list of custom actions to be added to the game's parser.
-            max_ticks (int, optional): The maximum number of ticks per round, defaulting to 10.
-            num_finalists (int, optional): The number of finalists in the game, defaulting to 2.
-            experiment_name (str, optional): The name of the experiment, defaulting to "exp1".
-            experiment_id (int, optional): The ID of the experiment, defaulting to 1.
-            end_state_check (Literal, optional): The condition for checking the end state, defaulting to "on_round".
-
-        Returns:
-            None
-        """
-
-        # Call the initializer of the parent SurvivorGame class with the starting location, player, characters, and custom
-        # actions
-        super().__init__(start_at, player, characters, custom_actions)
-
-        # Initialize a custom logger ("gen_agents_global_logger") for the game with the experiment name and simulation
-        # ID, which determine the saved file locations.
-        game_logger = logger.CustomLogger(
-            name="gen_agents_global_logger",
-            experiment_name=experiment_name,
-            simulation_id=experiment_id,
-            logfile_prefix="sim",
-            overwrite=True,
-        )
-        gpt_calls_logger = logger.CustomLogger(
-            name="gpt_calls_logger",
-            experiment_name=game_logger.get_experiment_name(),
-            simulation_id=game_logger.get_simulation_id,
-            logfile_prefix="gpt_calls",
-            overwrite=False,
-        )
-        self.logger = game_logger.get_logger()
-        self.gpt_calls_logger = gpt_calls_logger.get_logger()
-        self.experiment_name = experiment_name  # Store the experiment name
-        self.experiment_id = game_logger.get_simulation_id()  # Store the simulation ID
-
-        # Store the original player ID for reference
-        self.original_player_id = self.player.id
-
-        # Game related tracking variables
-        self.max_ticks_per_round = max_ticks
-        self.round = 0
-        self.tick = 0
-        self.total_ticks = 0
-        self.num_contestants = len(self.characters)
-        self.end_state_check = end_state_check
-
-        # Store end state variables:
-        # Initialize a jury to hold exiled players who will cast the final vote
-        self.jury = {}
-        self.voting_history = defaultdict(lambda: defaultdict(list))
-        self.num_finalists = num_finalists
-        self.winner_declared = False
-
-        # Log the starting locations of the characters for tracking purposes
-        self._log_starting_locs()

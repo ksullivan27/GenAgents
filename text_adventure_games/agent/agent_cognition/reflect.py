@@ -28,28 +28,49 @@ Description: defines how agents reflect upon their past experiences
 # 3a. Need just goals from the last round
 # 4a. see 4
 
+print("Importing Reflect")
+
 from typing import TYPE_CHECKING, Dict
 import json
 import logging
 
+print(f"\t{__name__} calling imports for General")
+from text_adventure_games.utils.general import (
+    enumerate_dict_options,
+)
+
 # Local imports for memory management, prompts, and GPT helper functions
-from text_adventure_games.agent.memory_stream import MemoryType
 from text_adventure_games.assets.prompts import reflection_prompts as rp
+
+print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
+
+print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (
     limit_context_length,
     get_prompt_token_count,
     get_token_remainder,
-    GptCallHandler,
 )
 
 # Importing OrderedSet for maintaining unique ordered collections
 from ordered_set import OrderedSet
-from . import retrieve  # Importing the retrieve module from the current package
+
+print(f"\t{__name__} calling imports for Retrieve")
+# Importing the Retrieve class from the current package
+from .retrieve import Retrieve
+
+print(f"\t{__name__} calling imports for MemoryType")
+from text_adventure_games.agent.memory_stream import MemoryType
+
+print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
+from text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 # Type checking imports for better IDE support and type hints
 if TYPE_CHECKING:
+    print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Game class for type hints
+
+    print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import Character  # Character class for type hints
 
 
@@ -57,50 +78,84 @@ class Reflect:
     """
     A class to manage and perform reflection operations for characters in the game.
 
-    This class provides methods to facilitate different types of reflections, such as reflecting on past actions,
-    goals, and relationships. It utilizes a shared GPT handler to generate reflections based on the character's
-    memories and the current game state.
+    This class offers methods to facilitate various types of reflections, including reflections on past actions,
+    goals, and relationships. It leverages a shared GPT handler to generate reflections based on the character's
+    memories and the current state of the game.
+
+    Class Variables:
+        REFLECTION_MAX_MEMORIES (int): Maximum number of memories to retrieve.
+        gpt_handler (GptCallHandler): Shared GptCallHandler for all instances.
+        model_params (dict): Model parameters for the GPT handler, including API key, model type, and token limits.
+        logger (Logger): Logger instance for logging reflection-related events.
+
+    Class Methods:
+        initialize_gpt_handler(): Initializes the shared GptCallHandler if it has not been created yet.
+        reflect(game: Game, character: Character): Executes a comprehensive reflection process.
+        generalize(game: Game, character: Character): Generates new generalizations based on the character's memories
+        and impressions.
+        add_generalizations_to_memory(game: Game, character: Character, generalizations: Dict): Parses and adds new
+        reflections to the character's memory.
+        add_new_generalization_helper(game: Game, character: Character, generalization: Dict): Adds a new generalization
+        to the character's memory.
+        add_new_generalizations(game: Game, character: Character, generalizations: Dict): Adds new generalizations as
+        memories to the character's memory.
+        update_existing_generalizations(game: Game, character: Character, generalizations: Dict): Updates existing
+        generalizations in the character's memory based on the provided data.
     """
-    
-    # Constants for reflection output limits and retry attempts
-    REFLECTION_MAX_OUTPUT = 512  # Maximum output length for reflections
+
     REFLECTION_MAX_MEMORIES = 25  # Maximum number of memories to retrieve
-    REFLECTION_RETRIES = 5  # Number of retries for reflection generation
 
     # Shared GptCallHandler for all instances
     gpt_handler = None
-
     # Model parameters for the GPT handler
     model_params = {
-        "api_key_org": "Helicone",
-        "model": get_models_config()["reflect"]["model"],
-        "max_tokens": REFLECTION_MAX_OUTPUT,
-        "temperature": 1,
-        "top_p": 1,
-        "frequency_penalty": 0,
-        "presence_penalty": 0,
-        "max_retries": REFLECTION_RETRIES,
+        # "max_output_tokens": 512,
+        # "temperature": 1,
+        # "top_p": 1,
+        # "frequency_penalty": 0,
+        # "presence_penalty": 0,
+        # "max_retries": 5,
     }
-    
+
     # Set up the logger at the module level
     logger = logging.getLogger("agent_cognition")
+
+    memory_query_keywords_and_embeddings_list = None
 
     @classmethod
     def initialize_gpt_handler(cls):
         """
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
+
+        print(f"-\tReflect Module is initializing GptCallHandler")
+
+        # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
-            cls.gpt_handler = GptCallHandler(**cls.model_params)
+            cls.gpt_handler = GptCallHandler(
+                model_config_type="reflect", **cls.model_params
+            )
+
+    @classmethod
+    def get_memory_query_keywords_and_embeddings(cls, game: "Game"):
+        if cls.memory_query_keywords_and_embeddings_list is None:
+            cls.memory_query_keywords_and_embeddings_list = [Retrieve.get_query_keywords_and_embeddings(
+                    game=game,
+                    query=q
+                ) for q in rp.memory_query_questions
+            ]
 
     @classmethod
     def reflect(cls, game: "Game", character: "Character"):
         """
-        Perform a complete reflection; this is composed of sub-types of reflection:
-        1. reflect on actions from past round (inspired by CLIN)
-        2. reflect on goals
-        3. reflect on relationships
+        Executes a comprehensive reflection process, which includes:
+        1. Reflecting on actions from the previous round (inspired by CLIN)
+        2. Reflecting on goals
+        3. Reflecting on relationships
         """
+        # Initialize the GPT handler if it hasn't been set up yet
+        cls.initialize_gpt_handler()
+        cls.get_memory_query_keywords_and_embeddings(game)  # Get the memory query keywords and embeddings
         cls.generalize(game, character)
         # cls.reflect_on_goals(game, character)
         # cls.reflect_on_relationships(game, character)
@@ -109,21 +164,24 @@ class Reflect:
     def generalize(cls, game: "Game", character: "Character"):
         """
         Generates new generalizations based on the character's memories and impressions.
-        
+
         This method retrieves relevant memories and impressions from the character's past actions and interactions,
-        categorizes them into reflections and observations, and constructs a user prompt for the GPT model to 
-        generate new insights. The process involves calculating token counts to ensure the prompt fits within 
+        categorizes them into reflections and observations, and constructs a user prompt for the GPT model to
+        generate new insights. The process involves calculating token counts to ensure the prompt fits within
         the model's context limits and managing retries for generating responses.
 
         Returns:
             None
         """
+
         # Set the max number of memories to retrieve for each query
         memories_per_retrieval = cls.REFLECTION_MAX_MEMORIES
 
         # Construct the system prompt
         system_prompt = (
-            character.get_standard_info(game, include_goals=True, include_perceptions=False)
+            character.get_standard_info(
+                game, include_goals=True, include_perceptions=False
+            )
             + rp.gpt_generalize_prompt
         )
 
@@ -149,8 +207,8 @@ class Reflect:
         relevant_memories = []
 
         # Retrieve relevant memories based on predefined query questions
-        for question in rp.memory_query_questions:
-            memories = retrieve.retrieve(
+        for question in cls.memory_query_keywords_and_embeddings_list:
+            memories = Retrieve.retrieve(
                 game=game,
                 character=character,
                 query=question,
@@ -263,7 +321,9 @@ class Reflect:
                 else:
                     success = True
                     # Add the new generalizations to the character's memory
-                    cls.add_generalizations_to_memory(game, character, new_generalizations)
+                    cls.add_generalizations_to_memory(
+                        game, character, new_generalizations
+                    )
 
             # Update the relevant memories to exclude those already reflected upon
             relevant_memories = list(
@@ -275,7 +335,9 @@ class Reflect:
             )
 
     @classmethod
-    def add_generalizations_to_memory(cls, game: "Game", character: "Character", generalizations: Dict):
+    def add_generalizations_to_memory(
+        cls, game: "Game", character: "Character", generalizations: Dict
+    ):
         """
         Parses the GPT-generated generalizations dictionary to extract and add new reflections
         to the character's memory. The structure of the generalizations depends on the prompt used.
@@ -293,7 +355,9 @@ class Reflect:
         cls.update_existing_generalizations(game, character, generalizations)
 
     @classmethod
-    def add_new_generalization_helper(cls, game: "Game", character: "Character", generalization: Dict):
+    def add_new_generalization_helper(
+        cls, game: "Game", character: "Character", generalization: Dict
+    ):
         """
         Add a new generalization to the character's memory.
 
@@ -339,7 +403,9 @@ class Reflect:
             )
 
     @classmethod
-    def add_new_generalizations(cls, game: "Game", character: "Character", generalizations: Dict):
+    def add_new_generalizations(
+        cls, game: "Game", character: "Character", generalizations: Dict
+    ):
         """
         Add new generalizations as memories to the character's memory.
 
@@ -367,7 +433,9 @@ class Reflect:
                 cls.add_new_generalization_helper(game, character, ref)
 
     @classmethod
-    def update_existing_generalizations(cls, game: "Game", character: "Character", generalizations: Dict):
+    def update_existing_generalizations(
+        cls, game: "Game", character: "Character", generalizations: Dict
+    ):
         """
         Update existing generalizations in the character's memory based on the provided data.
 
@@ -408,12 +476,16 @@ class Reflect:
                     statement = ref["statement"]
                 except KeyError:
                     # If the index or statement key is missing, log the error and create a new reflection
-                    cls.logger.error(f"Missing required key in updated generalization: {ref}")
+                    cls.logger.error(
+                        f"Missing required key in updated generalization: {ref}"
+                    )
                     cls.add_new_generalization_helper(game, character, ref)
                     continue
                 except ValueError:
                     # If the index cannot be converted to an integer, log the error and create a new reflection
-                    cls.logger.error(f"Invalid index format in updated generalization: {ref}")
+                    cls.logger.error(
+                        f"Invalid index format in updated generalization: {ref}"
+                    )
                     cls.add_new_generalization_helper(game, character, ref)
                     continue
                 except TypeError:
@@ -431,7 +503,9 @@ class Reflect:
                         # Score the action described in the statement, obtaining keywords and importance
                         _, ref_importance, ref_kwds = (
                             game.parser.summarize_and_score_action(
-                                description=statement, thing=character, needs_summary=False
+                                description=statement,
+                                thing=character,
+                                needs_summary=False,
                             )
                         )
 

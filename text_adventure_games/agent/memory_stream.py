@@ -6,6 +6,9 @@ Description: Defines Agent memory classes
 """
 
 from __future__ import annotations  # Enables postponed evaluation of type annotations
+
+print("Importing MemoryStream")
+
 from typing import (
     TYPE_CHECKING,
     List,
@@ -29,18 +32,23 @@ from spacy import load as spacyload  # Importing spaCy for natural language proc
 
 # Local imports
 # Importing utility functions for OpenAI client setup and text embedding
-from ..utils.general import set_up_openai_client, get_text_embedding
+print(f"\t{__name__} calling imports for General")
+from ..utils.general import get_text_embedding
 
-# Importing GptCallHandler to interface with OpenAI client
-from ..gpt.gpt_helpers import GptCallHandler
-
-from ..agent.agent_cognition.reflect import Reflect
-
+# Importing logging for logging messages
+print(f"\t{__name__} calling imports for Logging")
 import logging
 
+print(f"\t{__name__} calling Type Checking imports for GptHelpers")
+from ..gpt.gpt_helpers import GptCallHandler
+
 if TYPE_CHECKING:
+    print(f"\t{__name__} calling Type Checking imports for Character")
     from ..things.characters import Character
-    from ..games import Game
+
+    # from ..games import Game
+
+print(f"\tFinished calling imports for MemoryStream")
 
 
 class MemoryType(Enum):
@@ -61,6 +69,7 @@ class MemoryType(Enum):
     DIALOGUE = 2  # Represents a dialogue memory type
     REFLECTION = 3  # Represents a reflection memory type
     PERCEPT = 4  # Represents a perception memory type
+    GOAL = 5  # Represents a goal memory type
 
 
 @dataclass
@@ -107,7 +116,7 @@ class ObservationNode:
     # associated_nodes: Optional[list[int]] = field(default_factory=list)
 
 
-class MemoryStream(Enum):
+class MemoryStream:
     """
     Represents the memory stream for an agent, managing observations and memory types.
 
@@ -117,6 +126,15 @@ class MemoryStream(Enum):
     Attributes:
         _stopwords (set): A set of stopwords for natural language processing.
     """
+
+    gpt_handler = None  # Class-level attribute to store the shared GPT handler
+
+    model_params = {
+        # "max_output_tokens": 256,
+        # "temperature": 1,
+        # "top_p": 1,
+        # "max_retries": 5,
+    }
 
     # store stopwords as a class variable for efficient access when adding new memories
     _stopwords = None
@@ -146,6 +164,20 @@ class MemoryStream(Enum):
 
     logger = None  # Class-level attribute to store the shared logger
 
+    @classmethod
+    def initialize_gpt_handler(cls):
+        """
+        Initialize the shared GptCallHandler if it hasn't been created yet.
+        """
+
+        print(f"-\tGoals Module is initializing GptCallHandler")
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        if cls.gpt_handler is None:
+            cls.gpt_handler = GptCallHandler(
+                model_config_type="miscellaneous", **cls.model_params
+            )
+
     def __init__(self, character: "Character"):
         """
         Initializes an agent with identifying information and memory features.
@@ -174,9 +206,13 @@ class MemoryStream(Enum):
             importance_alpha (float): Weight for importance in relevancy scoring.
             recency_alpha (float): Weight for recency in relevancy scoring.
             relevance_alpha (float): Weight for relevance in relevancy scoring.
-            client: The OpenAI client instance for this agent.
             stopwords (set): A set of stopwords for natural language processing.
         """
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        MemoryStream.initialize_gpt_handler()
+
+        print(f"-\tInitializing MemoryStream")
 
         # Keep track of this agent's identifying information
         # Store the character
@@ -188,19 +224,14 @@ class MemoryStream(Enum):
 
         # Dictionary to store embeddings of observations, indexed by observation index
         self.memory_embeddings = {}
+        # Dictionary to store embeddings of keywords, indexed by keyword
+        self.keyword_embeddings = {}
         # Nested dictionary for categorizing keywords
         self.keyword_nodes = defaultdict(lambda: defaultdict(list))
         # Dictionary to categorize memory types using MemoryType enum values
         self.memory_type_nodes = defaultdict(list)
         # Dictionary to store observations by the current round number
         self.this_round_nodes = defaultdict(list)
-
-        # Cache for current querying statements about this agent
-        # Cached embeddings include: persona summary, goals, and personal relationships
-        # These will assist in the memory retrieval process
-        self.query_embeddings = (
-            self.set_query_embeddings()
-        )  # Initialize query embeddings based on the character
 
         # Attributes defining the memory features of the agent
         # Number of observations available without retrieval; used for gathering keys
@@ -219,15 +250,12 @@ class MemoryStream(Enum):
         self.recency_alpha = 1  # Weight for recency in relevancy scoring
         self.relevance_alpha = 1  # Weight for relevance in relevancy scoring
 
-        # Set up a client for this instance of the agent
-
-        # self.client = set_up_openai_client(
-        #     org="Penn"
-        # )  # Initialize OpenAI client with organization identifier
-
-        # TODO: Shouldn't we use the gpt_helpers.py module to create the client instead of the ab?
-        # Initialize OpenAI client with organization identifier
-        self.client = GptCallHandler(org="Penn")
+        # Cache for current querying statements about this agent
+        # Cached embeddings include: persona summary, goals, and personal relationships
+        # These will assist in the memory retrieval process
+        self.query_embeddings = (
+            self.set_query_embeddings()
+        )  # Initialize query embeddings based on the character
 
         # Initialize stopwords for natural language processing
         self.stopwords = self._generate_stopwords()  # Generate and store stopwords
@@ -274,6 +302,9 @@ class MemoryStream(Enum):
             It also caches the memory under relevant keywords and memory types for efficient retrieval.
         """
 
+        # Import Character class from the text_adventure_games.things module (to avoid circular imports)
+        from text_adventure_games.things import Character
+
         if not self.is_valid_memory_type(memory_type):
             valid_types = [type.name for type in MemoryType]
             raise ValueError(
@@ -293,7 +324,7 @@ class MemoryStream(Enum):
         node_kwds = [w for kw_type in keywords.values() for w in kw_type]
 
         # Embed the description
-        memory_embedding = self.get_observation_embedding(description)
+        memory_embedding = self.get_text_embedding(description)
         self.memory_embeddings[node_id] = memory_embedding
 
         # Check if this action was done by this agent
@@ -341,17 +372,34 @@ class MemoryStream(Enum):
                 node_is_self=self_is_actor,
             )
 
+        if memory_type == MemoryType.GOAL.value:
+            new_memory = self.add_goal(
+                node_id,
+                round,
+                tick,
+                description,
+                location,
+                success_status,
+                memory_importance,
+                type=MemoryType.GOAL,
+                node_keywords=set(node_kwds),
+                node_is_self=self_is_actor,
+            )
+
         # Add node to sequential memory
         self.observations.append(new_memory)
 
         # NODE CACHING
         # Cache the node under its keywords
         for category, kws_list in keywords.items():
-            for word in kws_list:
-                if word in self.keyword_nodes[category]:
-                    self.keyword_nodes[category][word].append(node_id)
+            for keyword in kws_list:
+                if keyword in self.keyword_nodes[category]:
+                    self.keyword_nodes[category][keyword].append(node_id)
                 else:
-                    self.keyword_nodes[category].update({word: [node_id]})
+                    # Get the keyword's embedding and store it in the keyword_embeddings dictionary
+                    kw_embedding = self.get_text_embedding(keyword)
+                    self.keyword_embeddings[keyword] = kw_embedding
+                    self.keyword_nodes[category].update({keyword: [node_id]})
 
         # Cache the node under the value of its MemoryType and its round ID.:
         self.memory_type_nodes[memory_type].append(node_id)
@@ -359,6 +407,8 @@ class MemoryStream(Enum):
 
         # increment the internal count of nodes
         self.num_observations += 1
+
+        return node_id
 
     def add_action(
         self,
@@ -514,6 +564,57 @@ class MemoryStream(Enum):
             node_is_self=node_is_self,
         )
 
+    def add_goal(
+        self,
+        node_id,
+        round,
+        tick,
+        description,
+        location: str,
+        success_status: bool,
+        memory_importance: int,
+        type: MemoryType,
+        node_keywords: set,
+        node_is_self: int,
+    ) -> None:
+        """
+        Creates a new goal observation node.
+
+        This method constructs an `ObservationNode` representing a goal made by the agent,
+        encapsulating relevant details such as the round, tick, description, and success status.
+        The created node can be used for tracking goals within the agent's memory system.
+
+        Args:
+            node_id (int): The unique identifier for the observation node.
+            round (int): The current round in the game.
+            tick (int): The current tick or time step in the game.
+            description (str): A description of the goal being recorded.
+            location (str): The location where the goal took place.
+            success_status (bool): Indicates whether the goal was successful.
+            memory_importance (int): A value representing the importance of the goal memory.
+            type (MemoryType): The type of memory being created, specifically for goals.
+            node_keywords (set): A set of keywords associated with the goal.
+            node_is_self (int): Indicates whether the goal was made by the agent itself (1 for true, 0 for false).
+
+        Returns:
+            ObservationNode: The newly created goal observation node.
+        """
+
+        return ObservationNode(
+            node_id,
+            node_round=round,
+            node_tick=tick,
+            node_level=2,
+            node_loc=location,
+            node_description=description,
+            node_success=success_status,
+            embedding_key=node_id,
+            node_importance=memory_importance,
+            node_type=type,
+            node_keywords=node_keywords,
+            node_is_self=node_is_self,
+        )
+
     # ----------- GETTER METHODS -----------
     def get_observation(self, node_id):
         """
@@ -574,6 +675,47 @@ class MemoryStream(Enum):
         # If the node exists, return its type; otherwise, return None if the node does not exist.
         return node.node_type if (node := self.get_observation(node_id)) else None
 
+    def get_observation_embedding(self, index):
+        """
+        Retrieves the embedding for a specified node index.
+
+        This method checks if a node exists at the given index and, if so, returns its corresponding embedding from
+        memory. It is useful for accessing the vector representation of a node's description for further processing or
+        analysis.
+
+        Args:
+            index (int): The index of the node for which to retrieve the embedding.
+
+        Returns:
+            np.array: The embedding of the node description if the node exists; otherwise, it may raise an error if the
+            node does not exist.
+        """
+
+        # Check if a node exists at the specified index
+        if self.node_exists(index):
+            # Return the embedding associated with the node at the given index
+            return self.memory_embeddings[index]
+
+    def get_keyword_embedding(self, keyword):
+        """
+        Fetches the embedding corresponding to a specified keyword.
+
+        This method looks up the keyword embeddings dictionary to retrieve the embedding for the provided keyword.
+        If the keyword exists, it returns the associated embedding; if not, it generates a new embedding for the
+        keyword.
+
+        Args:
+            keyword (str): The keyword for which the embedding is to be retrieved.
+
+        Returns:
+            np.array: The embedding linked to the specified keyword.
+        """
+
+        return (
+            self.keyword_embeddings.get(keyword, None)
+            or MemoryStream.gpt_handler.generate_embeddings(keyword)
+        )
+
     def get_enumerated_description_list(
         self, node_id_list, as_type: Literal["str", "tuple"] = True
     ) -> Union[List[Tuple], List[str]]:
@@ -610,25 +752,6 @@ class MemoryStream(Enum):
             # Return a list of formatted strings, each containing the node ID and description, followed by a newline
             # character
             return [f"{mem_id}. {mem_desc}\n" for mem_id, mem_desc in enum_nodes]
-
-    def get_observation_embedding(self, text):
-        """
-        Generates an embedded vector representation of the given text.
-
-        This method takes a text input and retrieves its corresponding embedded vector using a text embedding function.
-        The resulting vector can be used for various applications, such as similarity comparisons or machine learning
-        tasks.
-
-        Args:
-            text (str): The text to be converted into an embedded vector.
-
-        Returns:
-            numpy.ndarray: The embedded vector representation of the input text.
-        """
-
-        # return get_text_embedding(text)
-        # TODO: Shouldn't this use the gpt_helpers.py module (see other TODO)
-        return self.client.generate_embeddings(text)
 
     def get_observations_by_round(self, round):
         """
@@ -743,27 +866,6 @@ class MemoryStream(Enum):
         # Return the complete summary of the most recent observations
         return summary
 
-    def get_embedding(self, index):
-        """
-        Retrieves the embedding for a specified node index.
-
-        This method checks if a node exists at the given index and, if so, returns its corresponding embedding from
-        memory. It is useful for accessing the vector representation of a node's description for further processing or
-        analysis.
-
-        Args:
-            index (int): The index of the node for which to retrieve the embedding.
-
-        Returns:
-            np.array: The embedding of the node description if the node exists; otherwise, it may raise an error if the
-            node does not exist.
-        """
-
-        # Check if a node exists at the specified index
-        if self.node_exists(index):
-            # Return the embedding associated with the node at the given index
-            return self.memory_embeddings[index]
-
     def get_query_embeddings(self):
         """
         Retrieves the query embeddings stored in the agent's memory.
@@ -798,6 +900,25 @@ class MemoryStream(Enum):
                     else [value]
                 )
             ]
+        )
+
+    def get_text_embedding(self, text):
+        """
+        Generates an embedded vector representation of the given text.
+
+        This method takes a text input and retrieves its corresponding embedded vector using a text embedding function.
+        The resulting vector can be used for various applications, such as similarity comparisons or machine learning
+        tasks.
+
+        Args:
+            text (str): The text to be converted into an embedded vector.
+
+        Returns:
+            numpy.ndarray: The embedded vector representation of the input text.
+        """
+
+        return (
+            MemoryStream.gpt_handler.generate_embeddings(text)
         )
 
     def get_relationships_summary(self):
@@ -854,6 +975,9 @@ class MemoryStream(Enum):
             dict: A dictionary containing the cached query embeddings for the persona and goals.
         """
 
+        # # Import Character class from the text_adventure_games.things module (to avoid circular imports)
+        # from text_adventure_games.things import Character
+
         # Initialize an empty dictionary to store cached query embeddings
         cached_queries = {}
 
@@ -865,13 +989,19 @@ class MemoryStream(Enum):
         except AttributeError:
             current_goal_embed = None
 
+        # print("Old set_query_embeddings", self.character)
         # TODO: This is the old way that didn't use gpt_helpers.py
         # Get the embedding for the character's persona summary (old way didn't use gpt_helpers.py)
-        # persona_embed = get_text_embedding(character.persona.summary)
+        # persona_embed = get_text_embedding(self.character.persona.summary)
+        # print("New set_query_embeddings", self.character)
 
         # Get the persona embedding using the GPT call handler
         # TODO: Get embeddings for each component of the persona summary
-        persona_embed = self.client.generate_embeddings(self.character.persona.summary)
+        persona_embed = MemoryStream.gpt_handler.generate_embeddings(
+            self.character.persona.summary
+        )
+
+        print("Finished set_query_embeddings")
 
         # Check if the persona embedding was successfully retrieved
         if persona_embed is not None:
@@ -886,28 +1016,41 @@ class MemoryStream(Enum):
         # Return the dictionary containing the cached query embeddings
         return cached_queries
 
-    def set_goal_query(self, goal_embeddings):
+    def set_goal_query(self, goal_node_ids):
         """
-        Updates the query embeddings with the provided goal embeddings.
+        Updates the query embeddings with the specified goal embeddings.
 
-        This method attempts to set the goal query embeddings in the agent's query embeddings dictionary.
-        If the update fails due to a KeyError, it catches the exception and prints an error message, allowing the
-        program to continue running.
+        This method sets the goal query embeddings in the agent's query embeddings dictionary using the provided
+        node IDs. If the update encounters a KeyError, the exception is caught, and an error is logged, allowing
+        the program to continue execution without interruption.
 
         Args:
-            goal_embeddings (np.array): The embeddings to be set for the goal query.
+            goal_node_ids (list): A list of node IDs corresponding to the goals for which embeddings are to be set.
 
         Returns:
             None
         """
 
-        # Attempt to update the query_embeddings dictionary with the new goal embedding
+        try:
+            # Retrieve embeddings for each goal_node_id
+            goal_embeddings = [
+                self.memory_embeddings[node_id] for node_id in goal_node_ids
+            ]
+
+        # Catch a KeyError if the update fails due to a missing key
+        except KeyError as e:
+            # Raise a KeyError
+            raise KeyError(
+                "Goal query embeddings update failed. %s", e
+            )
+
+        # Attempt to update the query_embeddings dictionary with the new goal embeddings
         try:
             self.query_embeddings.update({"goals": goal_embeddings})
 
         # Catch a KeyError if the update fails due to a missing key
         except KeyError as e:
-            # Log the error instead of printing it
+            # Log the error
             MemoryStream.logger.error(
                 "Goal query embeddings update failed. Skipping. Caught: %s", e
             )
@@ -967,7 +1110,7 @@ class MemoryStream(Enum):
             return False
 
         # Retrieve the updated embedding based on the new description
-        updated_embedding = self.get_observation_embedding(new_description)
+        updated_embedding = self.get_text_embedding(new_description)
 
         # Update the node's embedding and return the result of the update operation
         return self.set_embedding(node_id, updated_embedding)
@@ -1057,22 +1200,22 @@ class MemoryStream(Enum):
         else:
             return True  # Return True if the conversion is successful, confirming the memory type is valid
 
-    def reflect(self, game: "Game"):
-        """
-        Reflects on the current state of the game, allowing the agent to process and evaluate its experiences.
+    # def reflect(self, game: Game):
+    #     """
+    #     Reflects on the current state of the game, allowing the agent to process and evaluate its experiences.
 
-        This method invokes the reflection process, which may involve analyzing past actions, updating memory, and
-        adjusting goals based on the game's current context.
+    #     This method invokes the reflection process, which may involve analyzing past actions, updating memory, and
+    #     adjusting goals based on the game's current context.
 
-        Args:
-            game (Game): The current game object, which contains information about the game state and context.
+    #     Args:
+    #         game (Game): The current game object, which contains information about the game state and context.
 
-        Returns:
-            None
-        """
+    #     Returns:
+    #         None
+    #     """
 
-        # Initialize the GPT handler for reflection
-        Reflect.initialize_gpt_handler()
+    #     # Initialize the GPT handler for reflection
+    #     Reflect.initialize_gpt_handler()
 
-        # Perform the reflection process
-        Reflect.reflect(game, self.character)
+    #     # Perform the reflection process
+    #     Reflect.reflect(game, self.character)

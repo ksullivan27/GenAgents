@@ -5,6 +5,8 @@ File: utils/general.py
 Description: helper methods used throughout the project
 """
 
+print("Importing General")
+
 # Importing defaultdict from collections for creating dictionaries with default values.
 from collections import defaultdict
 
@@ -32,13 +34,14 @@ from typing import Dict
 # Importing OpenAI class from the openai module for API interactions.
 from openai import OpenAI
 
-# Importing OpenAIEngine from kani.engines.openai for engine-specific operations.
-from kani.engines.openai import OpenAIEngine
+# # Importing OpenAIEngine from kani.engines.openai for engine-specific operations.
+# from kani.engines.openai import OpenAIEngine
 
-# Importing GptCallHandler from gpt.gpt_helpers for handling GPT call counts.
-from GenAgents.text_adventure_games.gpt.gpt_helpers import GptCallHandler
+# # Importing GptCallHandler from gpt.gpt_helpers for handling GPT call counts.
+# from GenAgentsBoardroom.text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 # Local imports from the current package, specifically constants used in the module.
+print(f"\t{__name__} calling imports for Consts")
 from . import consts
 
 
@@ -67,6 +70,11 @@ def set_up_openai_client(org="Penn", **kwargs):
 
     # Update the parameters with the retrieved API key.
     params["api_key"] = key
+
+    # TODO: See if this block below is needed
+    # Set the model to the value in the models config file if it is not already set
+    if params.get("model") is None:
+        params["model"] = consts.get_models_config()["miscellaneous"]["model"]
 
     # If the organization is "Helicone", retrieve and set the base URL for the API.
     if org == "Helicone":
@@ -119,20 +127,23 @@ def get_logger_extras(game, character=None, include_gpt_call_id=False, stack_lev
         AttributeError: If the character does not have the expected attributes.
     """
 
-    # Get the filename of the module that called this function
-    module_name = inspect.stack()[stack_level].filename
-    # Remove the .py extension
-    module_name = os.path.splitext(module_name)[0]
-    # Capitalize name
-    module_name = module_name.title()
-    
+    # Import GptCallHandler here to avoid circular import issues
+    print(f"\t{__name__} interior calling imports for GptCallHandler")
+    from ..gpt.gpt_helpers import GptCallHandler
+
+    # # Get the filename of the module that called this function
+    # module_name = inspect.stack()[stack_level].filename
+    # # Remove the .py extension
+    # module_name = os.path.splitext(module_name)[0]
+    # # Capitalize name
+    # module_name = module_name.title()
+
     if include_gpt_call_id:
         gpt_call_id = GptCallHandler.get_calls_count()
     else:
         gpt_call_id = "N/A"
 
     return {
-        "module": module_name,
         "gpt_call_id": gpt_call_id,
         "character_name": character.name if character else "none",
         "character_id": character.id if character else "none",
@@ -414,7 +425,7 @@ def parse_location_description(text):
                     desc_type, player, observed = (
                         desc_type.strip(),
                         player.strip(),
-                        observed.strip()
+                        observed.strip(),
                     )
                 except ValueError:
                     # If unpacking fails due to insufficient values, handle the error.

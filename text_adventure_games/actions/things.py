@@ -1,7 +1,12 @@
+print("Importing Things")
+
 # local imports
+print(f"\t{__name__} calling imports for Base")
 from . import base
 from . import preconditions as P
+print(f"\t{__name__} calling imports for Drink and Eat")
 from .consume import Drink, Eat
+print(f"\t{__name__} calling imports for Character")
 from ..things import Character
 
 

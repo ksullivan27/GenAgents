@@ -1,7 +1,8 @@
+print("Importing Things Base")
+
 from collections import defaultdict
 import json
 import itertools
-
 
 class Thing:
     """
@@ -52,6 +53,8 @@ class Thing:
         Returns:
             None
         """
+        
+        print(f"-\tInitializing Thing", name)
 
         self.id = next(Thing.new_id)  # Assign the next unique ID from the counter.
         Thing._last_id = (

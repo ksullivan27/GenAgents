@@ -1,3 +1,6 @@
+print("Importing Base")
+
+print(f"\t{__name__} calling imports for Thing, Character, Item, Location")
 from ..things import Thing, Character, Item, Location
 import re
 

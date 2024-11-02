@@ -113,16 +113,15 @@
       "max_out": 6384
     }
   },
-
   "Embeddings": {
     "text-embedding-3-small": {
-          "dimensions": 768
-        },
+      "dimensions": 768
+    },
     "text-embedding-3-large": {
-          "dimensions": 1024
-        },
+      "dimensions": 1024
+    },
     "text-embedding-ada-002": {
-          "dimensions": 1536
-        }
+      "dimensions": 1536
+    }
   }
-  }
+}

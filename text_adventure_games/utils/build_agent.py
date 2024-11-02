@@ -5,6 +5,8 @@ File: setup_agent.py
 Description: helper methods for agent setup
 """
 
+print("Importing Build Agent")
+
 import os
 import json
 from importlib.resources import files, as_file
@@ -15,10 +17,15 @@ import openai
 from sklearn.metrics.pairwise import cosine_similarity
 
 # relative imports
+print(f"{__name__} calling imports for Persona")
 from ..agent.persona import Persona
+print(f"{__name__} calling imports for TraitScale")
 from ..managers.scales import TraitScale
+print(f"{__name__} calling imports for GPT Agent Setup")
 from ..gpt import gpt_agent_setup, gpt_helpers
+print(f"{__name__} calling imports for General")
 from .general import set_up_openai_client
+print(f"{__name__} calling imports for Consts")
 from . import consts, general
 
 # from . import consts
@@ -66,7 +73,7 @@ def find_similar_character(query, characters, top_n=1):
     return idx[0]
 
 
-def get_or_create_base_facts(description: str, make_new=False, model=DEFAULT_MODEL):
+def get_or_create_base_facts(description: str, make_new=False):
     """
     Retrieves or creates base facts (JSON) for a character based on a given description. This function either generates
     a new character using the GPT model if requested or compares the description to existing characters to
@@ -75,7 +82,6 @@ def get_or_create_base_facts(description: str, make_new=False, model=DEFAULT_MOD
     Args:
         description (str): The description of the character for which to retrieve or create facts.
         make_new (bool, optional): A flag indicating whether to create a new character. Defaults to False.
-        model (str, optional): The GPT model to use for character creation. Defaults to "gpt-4o-mini".
 
     Returns:
         object: The character object that matches the description or is newly created.
@@ -84,13 +90,15 @@ def get_or_create_base_facts(description: str, make_new=False, model=DEFAULT_MOD
         ValueError: If GPT fails to create a character after the specified number of retries.
     """
 
+    print("GET OR CREATE BASE FACTS PLAYER DESCRIPTION:", description, make_new)
+
     # Check if a new character is requested by the user.
     if make_new:
         # Attempt to create a new character using the GPT model, retrying up to GPT_RETRIES times.
         for i in range(GPT_RETRIES):
             # Call the function to get a new character from GPT, passing the description and model.
             char, error_flag = gpt_agent_setup.get_new_character_from_gpt(
-                description, model
+                description
             )
             # If an error occurs during character creation, log the retry attempt and continue.
             if error_flag:
@@ -113,7 +121,7 @@ def get_or_create_base_facts(description: str, make_new=False, model=DEFAULT_MOD
         except FileNotFoundError:
             # If no character presets are found, log a message and default to creating a new character.
             print("No character presets found. Defaulting to new character creation.")
-            return gpt_agent_setup.get_new_character_from_gpt(description)
+            return get_or_create_base_facts(description, make_new=True)
 
         # Initialize a dictionary to hold the embedded representations of existing characters.
         embedded_characters = {}
@@ -286,7 +294,7 @@ def build_agent(
 
     # Retrieve or create the base facts for the agent using the provided description.
     # The make_new flag indicates whether to generate new facts if they do not already exist.
-    facts = get_or_create_base_facts(agent_description, make_new=facts_new, model=model)
+    facts = get_or_create_base_facts(agent_description, make_new=facts_new)
 
     # Print the generated facts for debugging or informational purposes.
     print(f"Generated facts: {facts}")

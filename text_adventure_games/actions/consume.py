@@ -1,6 +1,14 @@
 # local imports
+
+print("Importing Consume")
+
+print(f"\t{__name__} calling imports for Character")
 from ..things.characters import Character
+
+print(f"\t{__name__} calling imports for Base")
 from . import base
+
+print(f"\t{__name__} calling imports for Preconditions")
 from . import preconditions as P
 
 

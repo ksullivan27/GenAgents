@@ -1,10 +1,13 @@
+print("Importing Logger")
+
 import logging
 
 # local imports
+print(f"{__name__} calling imports for Logging Setup")
 from .logging_setup import setup_logger
 
 
-class CustomLogger():
+class CustomLogger:
     """
     CustomLogger is a class that sets up a logger for tracking experiments and simulations. It initializes a logger
     with a specified experiment name and simulation ID, and provides methods to access the logger instance and the
@@ -23,7 +26,9 @@ class CustomLogger():
         None
     """
 
-    def __init__(self, name, experiment_name, simulation_id, logfile_prefix=None, overwrite=True):
+    def __init__(
+        self, name, experiment_name, simulation_id, logfile_prefix=None, overwrite=True
+    ):
         """
         Initializes a CustomLogger instance by setting up a logger for a specified experiment and simulation. This
         constructor validates the provided simulation ID and creates a logger instance for logging messages related to

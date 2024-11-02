@@ -5,41 +5,44 @@ File: gpt_agent.py
 Description: Methods that access the OPENAI API and make a call to GPT
 """
 
+print("Importing GptAgentSetup")
+
 import re  # Import the regular expressions module for pattern matching and string manipulation.
 import openai  # Import the OpenAI library to interact with the OpenAI API.
 
 # Relative imports for utility functions and the GptCallHandler class.
+print(f"\t{__name__} calling imports for General")
 from ..utils import (
     general,
 )  # Import general utility functions from the parent directory.
+
+print(f"\t{__name__} calling imports for GptHelpers")
 from .gpt_helpers import (
     GptCallHandler,
 )  # Import the GptCallHandler class from the current package.
 
+print(f"\t{__name__} calling imports for PromptClasses")
+from ..assets.prompts import prompt_classes
+
 # Initialize the GPT handler with specific parameters for API interaction.
 GPT_HANDLER = GptCallHandler(
-    **{
-        "api_key_org": "Helicone",  # Set the organization identifier for the OpenAI API.
-        "model": "gpt-4",  # Specify the model to be used for API calls.
-        "max_tokens": 100,  # Define the maximum number of tokens to generate in the response.
+    model_config_type="persona_creation",
+    ** {
+        "max_output_tokens": 100,  # Define the maximum number of tokens to generate in the response.
         "temperature": 1,  # Set the sampling temperature for randomness in responses.
         "top_p": 1,  # Define the nucleus sampling parameter for controlling diversity.
         "max_retries": 5,  # Set the maximum number of retries for API calls in case of failure.
     }
 )
 
-DEFAULT_MODEL = "gpt-4o-mini"
 
-
-def get_new_character_from_gpt(description, model: str = DEFAULT_MODEL):
+def get_new_character_from_gpt(description):
     """
     Generates a new character based on a provided description using the GPT model. This function constructs a system
     prompt to guide the character generation and formats the output as a JSON structure.
 
     Args:
         description (str): A short description of the character to be generated.
-        model (str, optional): The model to be used for generating the character. Defaults to the default model
-        (e.g., "gpt-4o-mini").
 
     Returns:
         tuple: A tuple containing the generated character information in JSON format and any error encountered during
@@ -50,7 +53,7 @@ def get_new_character_from_gpt(description, model: str = DEFAULT_MODEL):
     """
 
     # client = general.set_up_openai_client(org="Penn")
-    GPT_HANDLER.update_params(max_tokens=200, temperature=1.25)
+    GPT_HANDLER.update_params(max_tokens=500, temperature=1.25)
 
     system_prompt = (
         """You are a character generator. You should fill in the following character information based on a short """
@@ -68,14 +71,17 @@ def get_new_character_from_gpt(description, model: str = DEFAULT_MODEL):
     )
 
     user_prompt = f"Create a character who fits this description: {description}"
-    response = GPT_HANDLER.generate(system_prompt, user_prompt)
+    response = GPT_HANDLER.generate(system_prompt, user_prompt, response_format=prompt_classes.Character)
     GPT_HANDLER.reset_defaults()
 
-    facts_json, error_in_json = general.extract_json_from_string(response)
-    return facts_json, error_in_json
+    print("RESPONSE:", response)
+
+    # facts_json, error_in_json = general.extract_json_from_string(response)
+
+    return response.model_dump(), False
 
 
-def get_trait_continuum(low: str, high: str, mid: str = None, model=DEFAULT_MODEL):
+def get_trait_continuum(low: str, high: str, mid: str = None):
     """
     Generates a list of adjectives that represent a semantic continuum between two specified extremes. This function
     uses the GPT model to create a smooth transition of adjectives based on the provided low, high, and optional mid
@@ -85,8 +91,6 @@ def get_trait_continuum(low: str, high: str, mid: str = None, model=DEFAULT_MODE
         low (str): The adjective representing the low end of the continuum.
         high (str): The adjective representing the high end of the continuum.
         mid (str, optional): An optional adjective representing the midpoint of the continuum. Defaults to None.
-        model (str, optional): The model to be used for generating the adjectives. Defaults to the default model
-        (e.g., "gpt-4o-mini").
 
     Returns:
         list: A list of adjectives that smoothly transition from low to high, potentially including the midpoint.
@@ -122,7 +126,6 @@ def get_target_adjective(
     low: str,
     high: str,
     target: int,
-    model=DEFAULT_MODEL,
     low_int: int = 0,
     high_int: int = 100,
 ):
@@ -135,8 +138,6 @@ def get_target_adjective(
         low (str): The adjective representing the low end of the continuum.
         high (str): The adjective representing the high end of the continuum.
         target (int): The target score along the continuum for which to find the corresponding adjective.
-        model (str, optional): The model to be used for generating the adjective. Defaults to the default model
-        (e.g., "gpt-4o-mini").
         low_int (int, optional): The integer score assigned to the low adjective. Defaults to 0.
         high_int (int, optional): The integer score assigned to the high adjective. Defaults to 100.
 
@@ -168,15 +169,14 @@ def get_target_adjective(
     return general.extract_target_word(response)
 
 
-def summarize_agent_facts(facts: str, model="gpt-4") -> str:
+def summarize_agent_facts(facts: str) -> str:
     """
     Generates a concise summary of an agent's characteristics based on provided facts. This function uses the GPT model
     to create a two-sentence description that captures the essence of the individual without merely listing their likes
     and dislikes.
 
     Args:
-        facts (str): A string containing facts about a person, which will be summarized. model (str, optional): The
-        model to be used for generating the summary. Defaults to "gpt-4".
+        facts (str): A string containing facts about a person, which will be summarized.
 
     Returns:
         str: A concise summary of the person's core characteristics.

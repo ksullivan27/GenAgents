@@ -5,6 +5,8 @@ File: agent_cognition/vote.py
 Description: defines how agents vote for one another. This is specific to Survivor or other similar competitive games.
 """
 
+print("Imported Vote")
+
 from collections import (
     Counter,
     defaultdict,
@@ -20,30 +22,47 @@ from typing import (
 import openai  # Importing OpenAI library for interacting with GPT models
 
 # Local imports for specific functionalities within the project
-# Importing retrieve module for data retrieval functions
-from . import retrieve
+# Importing Retrieve class for data retrieval functions
+print(f"\t{__name__} calling imports for Retrieve")
+from .retrieve import Retrieve
 
 # Importing vote_prompt for voting-related prompts
 from text_adventure_games.assets.prompts import vote_prompt as vp
 
 # Importing utility for logging extras
+print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import get_logger_extras
+
+print(f"\t{__name__} calling imports for Consts")
+from text_adventure_games.utils.consts import get_models_config
+
+print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (  # Importing helper functions for GPT interactions
     limit_context_length,  # Function to limit the context length for GPT
     get_prompt_token_count,  # Function to count tokens in a prompt
     get_token_remainder,  # Function to get remaining tokens
     context_list_to_string,  # Function to convert context list to string
-    GptCallHandler,  # Class for handling GPT calls
 )
-from ..memory_stream import MemoryType  # Importing MemoryType for memory management
+
+print(f"\t{__name__} calling imports for MemoryType")
+from text_adventure_games.agent.memory_stream import (
+    MemoryType,
+)  # Importing MemoryType for memory management
+
+print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
+from text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 if TYPE_CHECKING:  # Conditional import for type checking
+    print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import (
         Character,
     )  # Importing Character class for type hints
+
+    print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Importing Game class for type hints
 
 VOTING_MAX_OUTPUT = 100  # Constant defining the maximum output for voting
+
 
 class VotingSession:
     """
@@ -59,14 +78,35 @@ class VotingSession:
         participants (List[Character]): The list of participants in the voting session.
         tally (Counter): A counter to tally the votes received by each participant.
         voter_record (defaultdict): A record of the votes cast by each participant.
-        gpt_handler (GptCallHandler): Handler for making calls to the GPT model.
-        token_offset (int): Offset for token management during GPT calls.
-        offset_pad (int): Padding for token management during GPT calls.
-        immune (List[Character]): List of participants who are immune to voting.
-        exiled (List[str]): List of participants who have been exiled as a result of voting.
+
+    Class-level Attributes:
+        gpt_handler (GptCallHandler): Class-level attribute for making calls to the GPT model.
     """
 
+    gpt_handler = None  # Class-level attribute to store the shared GPT handler
+    # Define the parameters for configuring the GPT model
+    model_params = {
+        "max_output_tokens": 250,  # Maximum number of tokens to generate in a response
+        "temperature": 1,  # Controls the randomness of the output (higher is more random)
+        "top_p": 1,  # Nucleus sampling parameter for controlling diversity
+        "max_retries": 5,  # Maximum number of retries for API calls in case of failure
+    }
+
     logger = None  # Class-level attribute to store the shared logger
+
+    @classmethod
+    def initialize_gpt_handler(cls):
+        """
+        Initialize the shared GptCallHandler if it hasn't been created yet.
+        """
+
+        print(f"-\tVoting Session Module is initializing GptCallHandler")
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        if cls.gpt_handler is None:
+            cls.gpt_handler = GptCallHandler(
+                model_config_type="vote", **cls.model_params
+            )
 
     def __init__(self, game: "Game", participants: List["Character"]):
         """
@@ -88,9 +128,9 @@ class VotingSession:
         # Creating a default dictionary to record the votes cast by each participant
         self.voter_record = defaultdict(str)
 
-        # GPT call attributes for managing interactions with the GPT model
-        # Setting up the GPT handler with necessary parameters
-        self.gpt_handler = self._set_up_gpt()
+        # Initialize the GPT handler if it hasn't been set up yet
+        VotingSession.initialize_gpt_handler()
+
         # Initial token offset for managing token limits during GPT calls
         self.token_offset = 10
         # Padding for additional token management during GPT interactions
@@ -163,31 +203,6 @@ class VotingSession:
                 memory_type=MemoryType.ACTION.value,  # Type of memory being added
                 actor_id=p.id,  # ID of the participant adding the memory
             )
-
-    def _set_up_gpt(self):
-        """
-        Initialize and configure the GPT model for use.
-
-        This function sets up the parameters required for the GPT model, including API key, model type, and various
-        settings for token generation. It returns an instance of the GptCallHandler configured with the specified
-        parameters.
-
-        Returns:
-            GptCallHandler: An instance of GptCallHandler configured with the model parameters.
-        """
-
-        # Define the parameters for configuring the GPT model
-        model_params = {
-            "api_key_org": "Helicone",  # Organization API key for accessing the model
-            "model": "gpt-4",  # Specify the model version to use
-            "max_tokens": 250,  # Maximum number of tokens to generate in a response
-            "temperature": 1,  # Controls the randomness of the output (higher is more random)
-            "top_p": 1,  # Nucleus sampling parameter for controlling diversity
-            "max_retries": 5,  # Maximum number of retries for API calls in case of failure
-        }
-
-        # Create and return an instance of GptCallHandler with the specified parameters
-        return GptCallHandler(**model_params)
 
     def get_vote_options(self, current_voter: "Character", names_only=False):
         """
@@ -296,7 +311,9 @@ class VotingSession:
             else:
                 VotingSession.logger.error(
                     f"Voter {voter.name} failed to vote properly.",
-                    extra=get_logger_extras(self.game, self.voter, include_gpt_call_id=True),
+                    extra=get_logger_extras(
+                        self.game, self.voter, include_gpt_call_id=True
+                    ),
                 )
 
         # Clean up any idols used during this round of voting
@@ -518,7 +535,12 @@ class VotingSession:
         )
 
         # Retrieve hyper-relevant memories based on the constructed query
-        hyper_relevant_memories = retrieve.retrieve(self.game, voter, n=40, query=query)
+        hyper_relevant_memories = Retrieve.retrieve(
+            game=self.game,
+            character=voter,
+            query=query,
+            n=50
+        )
 
         # Build the system prompt using the voter's standard information and a predefined ending
         system = self._build_system_prompt(
@@ -882,7 +904,12 @@ class JuryVotingSession(VotingSession):
         )
 
         # Retrieve hyper-relevant memories based on the constructed query
-        hyper_relevant_memories = retrieve.retrieve(self.game, voter, n=50, query=query)
+        hyper_relevant_memories = Retrieve.retrieve(
+            game=self.game,
+            character=voter,
+            query=query,
+            n=50
+        )
 
         # Build the system prompt using the voter's standard information and a predefined ending
         system = self._build_system_prompt(

@@ -1,9 +1,13 @@
+print("Importing Scales")
+
 # Imports
 from collections import namedtuple
 from typing import List
 
 # local imports
+print(f"\t{__name__} calling imports for GptAgentSetup")
 from ..gpt.gpt_agent_setup import get_target_adjective
+print(f"\t{__name__} calling imports for Character")
 from ..things.characters import Character
 
 
@@ -331,7 +335,6 @@ class TraitScale(BaseScale):
             target=self.score,  # The current score of the trait.
             low_int=self.min,  # The minimum value of the scale.
             high_int=self.max,  # The maximum value of the scale.
-            model=model,  # The model to be used for generating the adjective.
         )
 
         # Assign the retrieved adjective to the instance variable for the trait.

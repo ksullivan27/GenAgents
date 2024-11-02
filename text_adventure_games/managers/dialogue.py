@@ -1,12 +1,18 @@
+print("Importing Dialogue")
+
 import tiktoken
+print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (
     limit_context_length,
     get_prompt_token_count,
     GptCallHandler,
 )
+print(f"\t{__name__} calling imports for Dialogue Prompt")
 from text_adventure_games.assets.prompts import dialogue_prompt as dp
+print(f"\t{__name__} calling imports for General")
 from ..utils.general import set_up_openai_client
-from ..agent.agent_cognition.retrieve import retrieve
+print(f"\t{__name__} calling imports for Retrieve")
+from ..agent.agent_cognition.retrieve import Retrieve
 
 ACTION_MAX_OUTPUT = 100
 
@@ -254,7 +260,7 @@ class Dialogue:
             query += ", ".join(self.characters_mentioned)
 
             # Retrieve the most relevant memories for the character
-            if context_list := retrieve(self.game, character, query, n=25):
+            if context_list := Retrieve.retrieve(self.game, character, query, n=25):
                 # Prepend a primer message to the list of memories
                 context_list = [
                     "These are select MEMORIES in ORDER from MOST to LEAST RELEVANT:\n"

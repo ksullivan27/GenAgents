@@ -6,9 +6,12 @@ that the player can interact with.  A connection to an adjacent location can be 
 the player to solve before making progress).
 """
 
-from .base import Thing
-from .items import Item
+print("Importing Locations")
 
+print(f"\t{__name__} calling imports for Base")
+from .base import Thing
+print(f"\t{__name__} calling imports for Items")   
+from .items import Item
 
 class Location(Thing):
     """
@@ -67,6 +70,8 @@ class Location(Thing):
         Returns:
             None
         """
+        
+        print(f"-\tInitializing Location", name)
 
         # Call the constructor of the parent Thing class to initialize the name and description attributes.
         super().__init__(name, description)

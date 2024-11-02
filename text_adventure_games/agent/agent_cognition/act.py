@@ -5,6 +5,8 @@ File: agent_cognition/act.py
 Description: defines how agents select an action given their perceptions and memory
 """
 
+print("Importing Act")
+
 import contextlib
 
 # Steps to choosing an action:
@@ -17,20 +19,35 @@ import contextlib
 from typing import TYPE_CHECKING
 
 # local imports
+
+print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (
     limit_context_length,
     get_prompt_token_count,
     get_token_remainder,
     context_list_to_string,
-    GptCallHandler,
 )
+
+print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
+
+print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import enumerate_dict_options
-from .retrieve import retrieve
+
+print(f"\t{__name__} calling imports for Retrieve")
+from .retrieve import Retrieve
+
+print(f"\t{__name__} calling imports for ActPrompts")
 from text_adventure_games.assets.prompts import act_prompts as ap
 
+print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
+from text_adventure_games.gpt.gpt_helpers import GptCallHandler
+
 if TYPE_CHECKING:
+    print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game
+
+    print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import Character
 
 
@@ -41,6 +58,9 @@ class Act:
     Args:
         game: The game instance that the character is part of.
         character: The character instance that will perform actions in the game.
+
+    Class Variables:
+        gpt_handler: The handler for interfacing with the GPT model.
 
     Methods:
         act: Generates and executes an action for the character based on the current game state.
@@ -53,13 +73,25 @@ class Act:
 
     gpt_handler = None
     model_params = {
-        "api_key_org": "Helicone",
-        "model": get_models_config()["act"]["model"],
-        "max_tokens": 100,
+        "max_output_tokens": 100,
         "temperature": 1,
         "top_p": 1,
         "max_retries": 5,
     }
+
+    @classmethod
+    def initialize_gpt_handler(cls):
+        """
+        Initialize the shared GptCallHandler if it hasn't been created yet.
+        """
+
+        print(f"-\tAct Module is initializing GptCallHandler")
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        if cls.gpt_handler is None:
+            cls.gpt_handler = GptCallHandler(
+                model_config_type="act", **cls.model_params
+            )
 
     def __init__(self, game, character):
         """
@@ -71,15 +103,16 @@ class Act:
             character: The character instance that will perform actions in the game.
         """
 
+        print(f"-\tInitializing Act")
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        Act.initialize_gpt_handler()
+
         # Assign the provided game instance to the instance variable for later use.
         self.game = game
 
         # Assign the provided character instance to the instance variable for later use.
         self.character = character
-
-        # Initialize the GPT handler if it hasn't been set up yet
-        if Act.gpt_handler is None:
-            Act.gpt_handler = GptCallHandler(**Act.model_params)
 
         # Initialize the token offset to zero, which will be used to manage token limits during action generation.
         self.token_offset = 0
@@ -105,7 +138,7 @@ class Act:
         action_to_take = self.generate_action(system_prompt, user_prompt)
 
         # self._log_action(self.game, self.character, action_to_take)
-        print(f"{self.character.name} chose to take action: {action_to_take}")
+        print(f"\t{self.character.name} chose to take action: {action_to_take}")
         return action_to_take
 
     def generate_action(self, system_prompt, user_prompt):
@@ -130,7 +163,9 @@ class Act:
         # client = set_up_openai_client("Helicone")
 
         # Generate a response from the GPT handler using the provided system and user prompts.
-        response = self.gpt_handler.generate(system=system_prompt, user=user_prompt, character=self.character)
+        response = self.gpt_handler.generate(
+            system=system_prompt, user=user_prompt, character=self.character
+        )
 
         # Check if the response is a tuple, indicating a potential error related to token limits.
         if isinstance(response, tuple):
@@ -279,8 +314,11 @@ class Act:
             # Append the impressions to the user message.
             user_messages += context_list_to_string(impressions)
         # Retrieve all relevant memories related to the current situation.
-        memories_list = retrieve(
-            self.game, self.character, query=None, n=40
+        memories_list = Retrieve.retrieve(
+            game=self.game,
+            character=self.character,
+            query=None,
+            n=40
         )  # Consider whether to limit the number of memories retrieved.
 
         # Calculate the remaining tokens available for memories.

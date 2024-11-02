@@ -11,7 +11,18 @@ subtype of Item which might make it easier to create items that are shared
 between two locations (like doors).
 """
 
+import traceback
 
+# Print a message showing that the module is being imported
+print(f"Importing Blocks Base")
+
+# Get the call stack and format it
+stack = traceback.format_stack()
+
+# Print the stack of modules calling this module
+print("Call stack for import:")
+for line in stack:
+    print(line.strip())
 class Block:
     """Represents a basic block in a text adventure game.
 
@@ -40,6 +51,8 @@ class Block:
             name (str): The name of the block.
             description (str): A description of the block.
         """
+        
+        print(f"-\tInitializing Block", name)
 
         # Assign the provided name to the block's name attribute
         self.name = name

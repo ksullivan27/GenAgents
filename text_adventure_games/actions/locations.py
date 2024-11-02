@@ -1,5 +1,11 @@
 # local imports
+
+print("Importing Actions Locations")
+
+print(f"\t{__name__} calling imports for Base")
 from . import base
+
+print(f"\t{__name__} calling imports for Character")
 from ..things import Character  # Item  # , Location
 
 
