@@ -6,50 +6,38 @@ Description: create a logger that exists for the entire program.
              Any external library logging should be captured as well, though we don't care about this info.
 """
 
-circular_import_prints = False
-
-if circular_import_prints:
-    print("Importing Logging Setup")
+print("Importing Logging Setup")
 
 # Import Union from the typing module to allow type hinting for variables that can hold multiple types.
-if circular_import_prints:
-    print(f"{__name__} calling imports for Union")
+print(f"{__name__} calling imports for Union")
 from typing import Union
 
 # Import PathLike from the os module to enable type hinting for objects that behave like file system paths.
-if circular_import_prints:
-    print(f"{__name__} calling imports for PathLike")
+print(f"{__name__} calling imports for PathLike")
 from os import PathLike
 
 # Import the os module for interacting with the operating system, including file and directory operations.
-if circular_import_prints:
-    print(f"{__name__} calling imports for os")
+print(f"{__name__} calling imports for os")
 import os
 
 # Import the json module for working with JSON data, including parsing and serialization.
-if circular_import_prints:
-    print(f"{__name__} calling imports for json")
+print(f"{__name__} calling imports for json")
 import json
 
 # Import the logging.config module to configure logging settings in the application.
-if circular_import_prints:
-    print(f"{__name__} calling imports for logging.config")
+print(f"{__name__} calling imports for logging.config")
 import logging.config
 
 # Import the pathlib module for object-oriented file system path manipulation.
-if circular_import_prints:
-    print(f"{__name__} calling imports for pathlib")
+print(f"{__name__} calling imports for pathlib")
 import pathlib
 
 # Import the datetime class from the datetime module and alias it as 'dt' for easier access to date and time functions.
-if circular_import_prints:
-    print(f"{__name__} calling imports for datetime")
+print(f"{__name__} calling imports for datetime")
 from datetime import datetime as dt
 
 # Local imports from the parent package, specifically functions related to directory and logging path management.
-if circular_import_prints:
-    print(f"{__name__} calling imports for consts")
-
+print(f"{__name__} calling imports for consts")
 from ..consts import (
     get_root_dir,  # Function to retrieve the root directory path.
     get_custom_logging_path,  # Function to get the path for custom logging.
@@ -112,6 +100,8 @@ def setup_logger(
         get_output_logs_path(), f"logs/{experiment_name}-{simulation_id}/"
     )
 
+    print("OVERWRITE:", overwrite)
+
     if not overwrite:
         # Validate the output directory and determine if it should be overwritten. If the directory exists, this asks
         # the user if they want to overwrite. If the directory does not exist, this creates the directory, and overwrite
@@ -119,9 +109,7 @@ def setup_logger(
         overwrite, validated_path, validated_id = validate_output_dir(
             new_log_path, experiment_name, simulation_id
         )
-    # If overwrite is True (when making additional loggers for the same experiment – meaning a command to overwrite has
-    # either been given or the experiment ID has been incremented), set the validated path to the new log path and the
-    # validated id to the simulation id.
+    # If overwrite is True, set the validated path to the new log path and the validated id to the simulation id.
     else:
         validated_path = new_log_path
         validated_id = simulation_id
@@ -147,63 +135,11 @@ def setup_logger(
         overwrite=overwrite,
     )
 
-    def find_unused_handlers_formatters_loggers(config, logger_name):
-        used_handlers = set()
-        used_formatters = set()
-        used_loggers = set()
-
-        def collect_used_handlers_formatters_loggers(logger_config):
-            for handler_name in logger_config.get("handlers", []):
-                handler_name = handler_name.replace("cfg://handlers.", "")
-                used_handlers.add(handler_name)
-                handler = config["handlers"].get(handler_name)
-                if handler:
-                    if "formatter" in handler:
-                        used_formatters.add(handler["formatter"])
-                    if "handlers" in handler:
-                        collect_used_handlers_formatters_loggers(handler)
-
-        def collect_used_loggers(logger_name):
-            if logger_name in used_loggers:
-                return
-            used_loggers.add(logger_name)
-            logger_config = config["loggers"].get(logger_name, {})
-            collect_used_handlers_formatters_loggers(logger_config)
-            parent_logger_name = ".".join(logger_name.split(".")[:-1])
-            if parent_logger_name:
-                collect_used_loggers(parent_logger_name)
-
-        # Collect used handlers, formatters, and loggers for the specified logger and its parents
-        collect_used_loggers(logger_name)
-
-        # Collect used handlers and formatters for the root logger
-        root_config = config["loggers"].get("root", {})
-        collect_used_handlers_formatters_loggers(root_config)
-
-        # Find all handlers, formatters, and loggers in the config
-        all_handlers = set(config["handlers"].keys())
-        all_formatters = set(config["formatters"].keys())
-        all_loggers = set(config["loggers"].keys())
-
-        # Determine unused handlers, formatters, and loggers
-        unused_handlers = all_handlers - used_handlers
-        unused_formatters = all_formatters - used_formatters
-        unused_loggers = all_loggers - used_loggers
-
-        return {
-            "handlers": list(unused_handlers),
-            "formatters": list(unused_formatters),
-            "loggers": list(unused_loggers),
-        }
-
-    # Example usage:
-    unused_items = find_unused_handlers_formatters_loggers(config, name)
-    for handler in unused_items["handlers"]:
-        del config["handlers"][handler]
-    for formatter in unused_items["formatters"]:
-        del config["formatters"][formatter]
-    for logger in unused_items["loggers"]:
-        del config["loggers"][logger]
+    # ### TRYING TO AMEND THE GPT CALLS LOG FILE PATH ###
+    # # Before calling dictConfig
+    # gpt_calls_handler = config['handlers'].get('gpt_calls_file_json')
+    # if gpt_calls_handler:
+    #     gpt_calls_handler['filename'] = os.path.join(get_output_logs_path(), 'logs/tmp_gpt_calls.jsonl')
 
     # Attempt to configure logging using the loaded configuration.
     try:
@@ -259,6 +195,13 @@ def setup_logger(
         # Retrieve the logger instance for global logging.
         custom_logger = logging.getLogger(name)
 
+    # # Debugging: Print the logger's handlers
+    # print(f"Logger '{name}' handlers:")
+    # for handler in custom_logger.handlers:
+    #     print(
+    #         f" - {handler.__class__.__name__} -> {handler.baseFilename if hasattr(handler, 'baseFilename') else 'N/A'}"
+    #     )
+
     # Return the configured logger and the validated simulation ID.
     return custom_logger, validated_id
 
@@ -297,6 +240,7 @@ def set_logs_paths(
 
         # Function to count the number of filename matches in the log handlers.
         def count_filename_matches(handler_name):
+            # print("COUNTING MATCHES FOR HANDLER:", handler_name)
             handler = logs_config["handlers"].get(handler_name)
             match_count = 0
             if handler:
@@ -306,6 +250,12 @@ def set_logs_paths(
                     for sub_handler in handler["handlers"]:
                         sub_handler = sub_handler.replace("cfg://handlers.", "")
                         match_count += count_filename_matches(sub_handler)
+            # print(
+            #     "MATCH COUNT:",
+            #     match_count,
+            #     "for handler:",
+            #     handler_name
+            # )
             return match_count
 
         # Function to update the filename of a log handler.
@@ -385,9 +335,10 @@ def set_logs_paths(
 
     # Iterate through each directory path to ensure it exists.
     for log_dir in dir_paths:
+        print("LOG DIR:", log_dir)
         if not os.path.exists(log_dir):
             # If the directory does not exist, create it.
-            # print("couldn't find path: ", log_dir)  # Uncomment for debugging purposes.
+            print("couldn't find path: ", log_dir)  # Uncomment for debugging purposes.
             os.makedirs(log_dir)
 
     # Check if the user has opted to overwrite the existing experiment log file.
@@ -400,6 +351,8 @@ def set_logs_paths(
         # If the file does not exist, create it to prevent file not found errors.
         # print("Creating custom log file:", custom_log_path)
         open(custom_log_path, "a").close()
+
+    print("\n\nFINAL LOG CONFIG:", logs_config)
 
     # # Check if the user has opted to overwrite the existing experiment log file.
     # if (not os.path.exists(experiment_log_path)) or (overwrite and os.path.exists(experiment_log_path)):

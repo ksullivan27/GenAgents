@@ -1,14 +1,20 @@
 # local imports
 
-print("Importing Consume")
+circular_import_prints = False
 
-print(f"\t{__name__} calling imports for Character")
+if circular_import_prints:
+    print("Importing Consume")
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Character")
 from ..things.characters import Character
 
-print(f"\t{__name__} calling imports for Base")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Base")
 from . import base
 
-print(f"\t{__name__} calling imports for Preconditions")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Preconditions")
 from . import preconditions as P
 
 

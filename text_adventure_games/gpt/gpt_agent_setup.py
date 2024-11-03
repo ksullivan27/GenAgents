@@ -5,23 +5,29 @@ File: gpt_agent.py
 Description: Methods that access the OPENAI API and make a call to GPT
 """
 
-print("Importing GptAgentSetup")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing GptAgentSetup")
 
 import re  # Import the regular expressions module for pattern matching and string manipulation.
 import openai  # Import the OpenAI library to interact with the OpenAI API.
 
 # Relative imports for utility functions and the GptCallHandler class.
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from ..utils import (
     general,
 )  # Import general utility functions from the parent directory.
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from .gpt_helpers import (
     GptCallHandler,
 )  # Import the GptCallHandler class from the current package.
 
-print(f"\t{__name__} calling imports for PromptClasses")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for PromptClasses")
 from ..assets.prompts import prompt_classes
 
 # Initialize the GPT handler with specific parameters for API interaction.

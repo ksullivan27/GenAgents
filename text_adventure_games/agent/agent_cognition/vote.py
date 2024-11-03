@@ -5,7 +5,10 @@ File: agent_cognition/vote.py
 Description: defines how agents vote for one another. This is specific to Survivor or other similar competitive games.
 """
 
-print("Imported Vote")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Imported Vote")
 
 from collections import (
     Counter,
@@ -23,20 +26,24 @@ import openai  # Importing OpenAI library for interacting with GPT models
 
 # Local imports for specific functionalities within the project
 # Importing Retrieve class for data retrieval functions
-print(f"\t{__name__} calling imports for Retrieve")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Retrieve")
 from .retrieve import Retrieve
 
 # Importing vote_prompt for voting-related prompts
 from text_adventure_games.assets.prompts import vote_prompt as vp
 
 # Importing utility for logging extras
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import get_logger_extras
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (  # Importing helper functions for GPT interactions
     limit_context_length,  # Function to limit the context length for GPT
     get_prompt_token_count,  # Function to count tokens in a prompt
@@ -44,21 +51,25 @@ from text_adventure_games.gpt.gpt_helpers import (  # Importing helper functions
     context_list_to_string,  # Function to convert context list to string
 )
 
-print(f"\t{__name__} calling imports for MemoryType")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for MemoryType")
 from text_adventure_games.agent.memory_stream import (
     MemoryType,
 )  # Importing MemoryType for memory management
 
-print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
+if circular_import_prints:
+    print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
 from text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 if TYPE_CHECKING:  # Conditional import for type checking
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import (
         Character,
     )  # Importing Character class for type hints
 
-    print(f"\t{__name__} calling Type Checking imports for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Importing Game class for type hints
 
 VOTING_MAX_OUTPUT = 100  # Constant defining the maximum output for voting
@@ -100,7 +111,8 @@ class VotingSession:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tVoting Session Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tVoting Session Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -694,7 +706,7 @@ class VotingSession:
 
         # Generate a vote by calling the GPT model with the provided system and user prompts
         # The system prompt includes context, while the user prompt contains recent memories and valid voting options
-        vote = self.gpt_handler.generate(system_prompt, user_prompt, character=voter)
+        vote = self.gpt_handler.generate(system_prompt, user_prompt, character=voter, game=self.game)
 
         # Check if the vote returned is a tuple, indicating a potential error
         if isinstance(vote, tuple):
@@ -757,7 +769,7 @@ class VotingSession:
         """
 
         # Retrieve additional logging context specific to the game and the exiled character
-        extras = get_logger_extras(self.game, exiled)
+        extras = get_logger_extras(game=self.game, character=exiled)
 
         # Set the type of log entry to "Vote"
         extras["type"] = "Vote"

@@ -1,18 +1,21 @@
 import traceback
 
-# Print a message showing that the module is being imported
-print(f"Importing Blocks Doors")
+circular_import_prints = False
+
+if circular_import_prints:
+    print(f"Importing Blocks Doors")
 
 # Get the call stack and format it
 stack = traceback.format_stack()
 
 # Print the stack of modules calling this module
-print("Call stack for import:")
-for line in stack:
-    print(line.strip())
+if circular_import_prints:
+    print("Call stack for import:")
 
 # local imports
-print(f"\t{__name__} calling imports for Base Block")
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Base Block")
 from .base import Block
 
 
@@ -52,7 +55,8 @@ class Locked_Door(Block):
             None
         """
         
-        print(f"-\tInitializing Locked_Door", location, door, connection)
+        if circular_import_prints:
+            print(f"-\tInitializing Locked_Door", location, door, connection)
 
         # Call the parent class's constructor to initialize the door with a name and description
         super().__init__("locked door", "The door is locked")

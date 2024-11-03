@@ -5,7 +5,10 @@ Author: Samuel Thudium (sam.thudium1@gmail.com)
 # Import future annotations for forward reference type hints.
 from __future__ import annotations
 
-print("Importing GptHelpers")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing GptHelpers")
 
 # Import necessary modules and classes from the standard library and third-party packages.
 from dataclasses import asdict, dataclass, field  # For creating data classes.
@@ -21,26 +24,33 @@ import httpx  # For making HTTP requests.
 import numpy as np  # Importing numpy for numerical operations and array handling.
 
 # Local imports from the project's utility modules.
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from ..utils.consts import get_config_file, get_assets_path, get_models_config
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from ..utils.general import enumerate_dict_options, get_logger_extras
-print(f"\t{__name__} calling imports for Prompts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Prompts")
 from ..assets.prompts import (
     gpt_helper_prompts as hp,
 )  # Importing predefined prompts for GPT helper.
 
-print(f"\t{__name__} calling imports for Logger")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Logger")
 # Set up a logger for this module to log messages with the module's name.
 logger = logging.getLogger(__name__)
-print(f"\t{__name__} calling imports for Prompt Classes")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Prompt Classes")
 from ..assets.prompts import prompt_classes
 
 if TYPE_CHECKING:
-    print(f"\t{__name__} calling imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling imports for Character")
     from ..things.characters import Character
-    print(f"\t{__name__} calling imports for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling imports for Game")
     from ..games import Game
 
 
@@ -92,7 +102,8 @@ class ClientInitializer:
             clients (dict): A dictionary to store initialized clients for different organizations.
         """
 
-        print(f"-\tInitializing ClientInitializer")
+        if circular_import_prints:
+            print(f"-\tInitializing ClientInitializer")
 
         # Initializes a counter to track how many times the API keys have been loaded.
         self.load_count = 0
@@ -730,7 +741,12 @@ class GptCallHandler:
             else:
                 # Log the GPT call details
                 if game:
-                    self._log_gpt_call(messages, response, character, game)
+                    self._log_gpt_call(
+                        messages=messages,
+                        response=response,
+                        game=game,
+                        character=character
+                    )
 
                 # If the API call is successful, update the token counts and increment the call count.
                 self._set_token_counts(
@@ -944,13 +960,12 @@ class GptCallHandler:
             character (Character, optional): The character associated with the GPT call, used for logging.
         """
 
-        print('Running _log_gpt_call')
-
-        print(f"\t{__name__} interior calling imports for Game")
+        if circular_import_prints:
+            print(f"\t{__name__} interior calling imports for Game")
         from ..games import Game
 
         extras = get_logger_extras(
-            game, character=character, include_gpt_call_id=True, stack_level=2
+            game=game, character=character, include_gpt_call_id=True, stack_level=2
         )
 
         extras["type"] = "GPT Call"
@@ -959,30 +974,31 @@ class GptCallHandler:
         messages_list = []
         for message in messages:
             messages_list.append(
-                f"{message['role'].title()}:\n{message['content']}"  # Format each message with its role.
+                f"{'-'*37} {message['role'].title()} {'-'*37}:\n\n{message['content']}" if message['role'].title() == 'User'
+                else f"{'-'*36} {message['role'].title()} {'-'*36}:\n\n{message['content']}"  # Format each message with its role.
             )
         messages = "\n\n".join(messages_list)  # Join formatted messages with double newlines.
 
-        choices = response["choices"][0]  # Get the first choice from the response.
+        choices = response.choices[0]  # Get the first choice from the response.
 
         # Add relevant response information to the extras dictionary.
-        extras["id"] = response["id"]
-        extras["model"] = response["model"]
+        extras["id"] = response.id
+        extras["model"] = response.model
         extras["messages"] = messages
-        extras["response"] = choices["message"]["content"]
-        extras["finish_reason"] = choices["finish_reason"]
+        extras["response"] = choices.message.content
+        extras["finish_reason"] = choices.finish_reason
 
         extras["max_output_tokens"] = self.max_output_tokens
         extras["temperature"] = self.temperature
         extras["top_p"] = self.top_p
         extras["frequency_penalty"] = self.frequency_penalty
         extras["presence_penalty"] = self.presence_penalty
-
+        
         # Extract and add token usage information to the message dictionary.
-        usage = response["usage"]
-        extras["prompt_tokens"] = usage["prompt_tokens"]
-        extras["completion_tokens"] = usage["completion_tokens"]
-        extras["total_tokens"] = usage["total_tokens"]
+        usage = response.usage
+        extras["prompt_tokens"] = usage.prompt_tokens
+        extras["completion_tokens"] = usage.completion_tokens
+        extras["total_tokens"] = usage.total_tokens
 
         # Log the details of the GPT call, including the input and the response received.
         game.gpt_call_logger.debug(f"GPT Call Details", extra=extras)

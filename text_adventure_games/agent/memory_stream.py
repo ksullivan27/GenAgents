@@ -7,7 +7,10 @@ Description: Defines Agent memory classes
 
 from __future__ import annotations  # Enables postponed evaluation of type annotations
 
-print("Importing MemoryStream")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing MemoryStream")
 
 from typing import (
     TYPE_CHECKING,
@@ -32,23 +35,28 @@ from spacy import load as spacyload  # Importing spaCy for natural language proc
 
 # Local imports
 # Importing utility functions for OpenAI client setup and text embedding
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from ..utils.general import get_text_embedding
 
 # Importing logging for logging messages
-print(f"\t{__name__} calling imports for Logging")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Logging")
 import logging
 
-print(f"\t{__name__} calling Type Checking imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling Type Checking imports for GptHelpers")
 from ..gpt.gpt_helpers import GptCallHandler
 
 if TYPE_CHECKING:
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from ..things.characters import Character
 
     # from ..games import Game
 
-print(f"\tFinished calling imports for MemoryStream")
+if circular_import_prints:
+    print(f"\tFinished calling imports for MemoryStream")
 
 
 class MemoryType(Enum):
@@ -170,7 +178,8 @@ class MemoryStream:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tGoals Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tGoals Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -212,7 +221,8 @@ class MemoryStream:
         # Initialize the GPT handler if it hasn't been set up yet
         MemoryStream.initialize_gpt_handler()
 
-        print(f"-\tInitializing MemoryStream")
+        if circular_import_prints:
+            print(f"-\tInitializing MemoryStream")
 
         # Keep track of this agent's identifying information
         # Store the character
@@ -712,8 +722,9 @@ class MemoryStream:
         """
 
         return (
-            self.keyword_embeddings.get(keyword, None)
-            or MemoryStream.gpt_handler.generate_embeddings(keyword)
+            self.keyword_embeddings.get(keyword)
+            if self.keyword_embeddings.get(keyword) is not None
+            else MemoryStream.gpt_handler.generate_embeddings(keyword)
         )
 
     def get_enumerated_description_list(
@@ -1000,8 +1011,6 @@ class MemoryStream:
         persona_embed = MemoryStream.gpt_handler.generate_embeddings(
             self.character.persona.summary
         )
-
-        print("Finished set_query_embeddings")
 
         # Check if the persona embedding was successfully retrieved
         if persona_embed is not None:

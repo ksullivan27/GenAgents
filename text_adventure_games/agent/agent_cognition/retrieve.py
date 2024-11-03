@@ -10,9 +10,16 @@ Description: defines how agents select an action given their perceptions and mem
 
 from __future__ import annotations  # Enables postponed evaluation of type annotations
 
-print("Importing Retrieve")
+circular_import_prints = False
 
-from typing import TYPE_CHECKING, Union, List  # Allows conditional imports for type hints
+if circular_import_prints:
+    print("Importing Retrieve")
+
+from typing import (
+    TYPE_CHECKING,
+    Union,
+    List,
+)  # Allows conditional imports for type hints
 import numpy as np  # Imports NumPy for numerical operations
 from sklearn.metrics.pairwise import (
     cosine_similarity,
@@ -22,29 +29,35 @@ from sklearn.metrics.pairwise import (
 if (
     TYPE_CHECKING
 ):  # Ensures that the following imports are only evaluated during type checking
-    print(f"\t{__name__} calling Type Checking imports for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Imports Game class for type hinting
 
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things.characters import (
         Character,
     )
 
-    print(f"\t{__name__} calling Type Checking imports for MemoryType")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for MemoryType")
     from text_adventure_games.agent.memory_stream import MemoryType
 
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import (  # Imports utility functions for general use
     combine_dicts_helper,  # Function to combine dictionaries
     get_text_embedding,  # Function to obtain text embeddings
 )
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
 
 # Importing GptCallHandler to interface with OpenAI client
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from ...gpt.gpt_helpers import GptCallHandler
 
 
@@ -86,7 +99,8 @@ class Retrieve:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tRetrieve Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tRetrieve Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -99,7 +113,11 @@ class Retrieve:
         cls,
         game: "Game",
         character: "Character",
-        query: Union[dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]], list[str], str] = None,
+        query: Union[
+            dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
+            list[str],
+            str,
+        ] = None,
         n: int = -1,
         include_idx=False,
         percentile: float = 0.75,
@@ -136,14 +154,17 @@ class Retrieve:
                           nodes are found.
         """
 
-        print("-\tInitializing Retrieve")
+        if circular_import_prints:
+            print("-\tInitializing Retrieve")
 
         # Initialize the GPT handler if it hasn't been set up yet
         cls.initialize_gpt_handler()
 
         # Gather keywords for searching relevant memory nodes based on the game and character context.
         # This gets the keywords associated with recent memories and goals, along with the optional query.
-        keywords_to_embeddings_dict = Retrieve._gather_keywords_for_search(game, character, query)
+        keywords_to_embeddings_dict = Retrieve._gather_keywords_for_search(
+            game, character, query
+        )
 
         # Retrieve memory node IDs that are relevant to the gathered search keys
         memory_node_ids = Retrieve._get_relevant_memory_ids(
@@ -155,7 +176,7 @@ class Retrieve:
 
         # If no relevant memory node IDs are found, return None
         if len(memory_node_ids) == 0:
-            return None
+            return []
 
         # Rank the memory nodes based on recency, importance, and relevance
         ranked_memory_ids = Retrieve._rank_nodes(
@@ -321,9 +342,11 @@ class Retrieve:
                 query_embeddings = [Retrieve.gpt_handler.generate_embeddings(query)]
             # If a query is a list of strings, compute the embeddings for each string
             elif isinstance(query, list):
-                query_embeddings = [Retrieve.gpt_handler.generate_embeddings(q) for q in query]
+                query_embeddings = [
+                    Retrieve.gpt_handler.generate_embeddings(q) for q in query
+                ]
             # If a query is a dictionary with embeddings, extract the embeddings
-            elif isinstance(query, dict) and 'embeddings' in query:
+            elif isinstance(query, dict) and "embeddings" in query:
                 query_embeddings = [q_dict["embeddings"] for q_dict in query.values()]
             else:
                 # raise an error if the query is not in the correct format
@@ -366,6 +389,9 @@ class Retrieve:
             list[int]: A list of unique memory node IDs that match the search keywords.
         """
 
+        if not search_keys:
+            return []
+
         # Initialize an empty list to store relevant memory node IDs
         memory_ids = []
 
@@ -378,12 +404,26 @@ class Retrieve:
                 all_node_ids.append(node_ids)
 
         # Flatten the search keys dictionary to get all embeddings
-        search_word_embeddings = [embedding for kw_embedding_dict in search_keys.values() for embedding in kw_embedding_dict.values()]
+        search_word_embeddings = np.array(
+            [
+                embedding
+                for kw_embedding_dict in search_keys.values()
+                for embedding in kw_embedding_dict.values()
+            ]
+        )
+
+        # Reshape search_word_embeddings if it's a 1D array
+        if search_word_embeddings.ndim == 1:
+            search_word_embeddings = search_word_embeddings.reshape(-1, 1)
 
         # Get the embeddings of all keywords
-        keyword_embeddings = [
-            character.memory.keyword_embeddings[kw] for kw in all_keywords
-        ]
+        keyword_embeddings = np.array(
+            [character.memory.keyword_embeddings[kw] for kw in all_keywords]
+        )
+
+        # Reshape keyword_embeddings if it's a 1D array
+        if keyword_embeddings.ndim == 1:
+            keyword_embeddings = keyword_embeddings.reshape(-1, 1)
 
         # Compute cosine similarity between all search words and all keywords
         similarities = cosine_similarity(search_word_embeddings, keyword_embeddings)
@@ -447,11 +487,21 @@ class Retrieve:
                     # Iterate over the keywords
                     for keyword in keywords:
                         # Check if the keyword has an associated embedding in the memory stream
-                        if not (keyword_embedding := character.memory.get_keyword_embeddings(keyword)):
+                        keyword_embedding = character.memory.get_keyword_embedding(
+                            keyword
+                        )
+                        if keyword_embedding is None or (
+                            isinstance(keyword_embedding, np.ndarray)
+                            and not keyword_embedding.size
+                        ):
                             # If not, generate an embedding for the keyword
-                            keyword_embedding = Retrieve.client.generate_embeddings(keyword)
+                            keyword_embedding = (
+                                Retrieve.gpt_handler.generate_embeddings(keyword)
+                            )
                         # Add the keyword and its embedding to the retrieval dictionary
-                        retrieval_kwds_with_embeddings[kw_type][keyword] = keyword_embedding
+                        retrieval_kwds_with_embeddings[kw_type][
+                            keyword
+                        ] = keyword_embedding
 
         ### 2. Gather keywords from the character's current goals ###
 
@@ -466,8 +516,9 @@ class Retrieve:
                 include_scores=False,
                 progress_as_percentage=False,
                 to_str=False,
-                list_prefix=""
+                list_prefix="",
             )
+
         except (AttributeError, KeyError):
             try:
                 # Attempt to retrieve the current goals for the previous round as a string
@@ -489,7 +540,9 @@ class Retrieve:
         # If current goals are available, extract keywords from them and combine with existing keywords
         if current_goals:
             for node_id in current_goals:
-                if goal_description := character.memory.get_observation_description(node_id):
+                if goal_description := character.memory.get_observation_description(
+                    node_id
+                ):
                     if goal_kwds := game.parser.extract_keywords(goal_description):
                         for kw_type, keywords in goal_kwds.items():
                             if kw_type not in retrieval_kwds_with_embeddings:
@@ -513,16 +566,22 @@ class Retrieve:
                                 retrieval_kwds_with_embeddings[kw_type] = {}
                             for keyword in keywords:
                                 # Generate embeddings for the query keywords
-                                retrieval_kwds_with_embeddings[kw_type][keyword] = Retrieve.client.generate_embeddings(keyword)
+                                retrieval_kwds_with_embeddings[kw_type][keyword] = (
+                                    Retrieve.gpt_handler.generate_embeddings(keyword)
+                                )
             elif isinstance(query, dict):
                 # query -> ['embeddings', 'keywords'] -> {'kw_type': {'keyword': embedding}}
+                # Revised: {'embeddings': {'query': embedding}, 'keywords': {'kw_type': {'keyword': embedding}}}
                 for embedding_keyword_dicts in query.values():
-                    for kw_embedding_dict in embedding_keyword_dicts['keywords']:
-                        for kw_type, keywords in kw_embedding_dict.items():
-                            if kw_type not in retrieval_kwds_with_embeddings:
-                                retrieval_kwds_with_embeddings[kw_type] = {}
-                            for keyword, embedding in keywords.items():
-                                retrieval_kwds_with_embeddings[kw_type][keyword] = embedding
+                    if "keywords" in embedding_keyword_dicts:
+                        for kw_embedding_dict in embedding_keyword_dicts["keywords"]:
+                            for kw_type, keywords in kw_embedding_dict.items():
+                                if kw_type not in retrieval_kwds_with_embeddings:
+                                    retrieval_kwds_with_embeddings[kw_type] = {}
+                                for keyword, embedding in keywords.items():
+                                    retrieval_kwds_with_embeddings[kw_type][
+                                        keyword
+                                    ] = embedding
 
         # Return the dictionary of gathered keywords and their embeddings for retrieval
         return retrieval_kwds_with_embeddings
@@ -588,8 +647,7 @@ class Retrieve:
 
     @classmethod
     def _score_cos_sim(
-        cls,
-        relevances: np.ndarray, percentile: float = 0.9, method: str = "mean"
+        cls, relevances: np.ndarray, percentile: float = 0.9, method: str = "mean"
     ) -> np.ndarray:
         """
         Calculate the mean or median of the cosine similarity scores above a specified percentile.
@@ -626,9 +684,7 @@ class Retrieve:
 
     @classmethod
     def get_query_keywords_and_embeddings(
-        cls,
-        game: "Game",
-        query: Union[list[str], str]
+        cls, game: "Game", query: Union[list[str], str]
     ) -> dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]]:
         """
         Convert a list of query strings into a dictionary of 'keywords' and 'embeddings' keys.
@@ -646,11 +702,11 @@ class Retrieve:
             keywords and their embeddings, and the query strings and their embeddings.
         """
 
+        # Initialize the GPT handler if it hasn't been set up yet
+        cls.initialize_gpt_handler()
+
         # Initialize the result dictionary with 'keywords' and 'embeddings' keys
-        result = {
-            'keywords': {},
-            'embeddings': {}
-        }
+        result = {"keywords": {}, "embeddings": {}}
 
         # If a query is a string, convert it to a list for processing
         if isinstance(query, str):
@@ -662,19 +718,21 @@ class Retrieve:
             keywords_dict = game.parser.extract_keywords(q)
 
             # Generate embeddings for the query string using the generate_embeddings method
-            query_embedding = Retrieve.client.generate_embeddings(q)
+            query_embedding = Retrieve.gpt_handler.generate_embeddings(q)
 
             # Add the query string and its embedding to the 'embeddings' key in the result dictionary
-            result['embeddings'][q] = query_embedding
+            result["embeddings"][q] = query_embedding
 
             # Iterate over the keyword types and their corresponding keywords
             for kw_type, keywords in keywords_dict.items():
-                if kw_type not in result['keywords']:
-                    result['keywords'][kw_type] = {}
+                if kw_type not in result["keywords"]:
+                    result["keywords"][kw_type] = {}
                 for keyword in keywords:
                     # Generate embeddings for each keyword
-                    keyword_embedding = Retrieve.client.generate_embeddings(keyword)
+                    keyword_embedding = Retrieve.gpt_handler.generate_embeddings(
+                        keyword
+                    )
                     # Add the keyword and its embedding to the 'keywords' key in the result dictionary
-                    result['keywords'][kw_type][keyword] = keyword_embedding
+                    result["keywords"][kw_type][keyword] = keyword_embedding
 
         return result

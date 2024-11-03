@@ -28,13 +28,17 @@ Description: defines how agents reflect upon their past experiences
 # 3a. Need just goals from the last round
 # 4a. see 4
 
-print("Importing Reflect")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Reflect")
 
 from typing import TYPE_CHECKING, Dict
 import json
 import logging
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import (
     enumerate_dict_options,
 )
@@ -42,10 +46,12 @@ from text_adventure_games.utils.general import (
 # Local imports for memory management, prompts, and GPT helper functions
 from text_adventure_games.assets.prompts import reflection_prompts as rp
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (
     limit_context_length,
     get_prompt_token_count,
@@ -55,22 +61,27 @@ from text_adventure_games.gpt.gpt_helpers import (
 # Importing OrderedSet for maintaining unique ordered collections
 from ordered_set import OrderedSet
 
-print(f"\t{__name__} calling imports for Retrieve")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Retrieve")
 # Importing the Retrieve class from the current package
 from .retrieve import Retrieve
 
-print(f"\t{__name__} calling imports for MemoryType")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for MemoryType")
 from text_adventure_games.agent.memory_stream import MemoryType
 
-print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
+if circular_import_prints:
+    print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
 from text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 # Type checking imports for better IDE support and type hints
 if TYPE_CHECKING:
-    print(f"\t{__name__} calling Type Checking imports for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Game class for type hints
 
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import Character  # Character class for type hints
 
 
@@ -128,7 +139,8 @@ class Reflect:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tReflect Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tReflect Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -311,7 +323,7 @@ class Reflect:
             while not success:
                 try:
                     response = cls.gpt_handler.generate(
-                        system=system_prompt, user=user_prompt_str
+                        system=system_prompt, user=user_prompt_str, character=character, game=game
                     )
                     # Parse the response as JSON to extract new generalizations
                     new_generalizations = json.loads(response)

@@ -5,7 +5,10 @@ File: setup_agent.py
 Description: helper methods for agent setup
 """
 
-print("Importing Build Agent")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Build Agent")
 
 import os
 import json
@@ -17,15 +20,20 @@ import openai
 from sklearn.metrics.pairwise import cosine_similarity
 
 # relative imports
-print(f"{__name__} calling imports for Persona")
+if circular_import_prints:
+    print(f"{__name__} calling imports for Persona")
 from ..agent.persona import Persona
-print(f"{__name__} calling imports for TraitScale")
+if circular_import_prints:
+    print(f"{__name__} calling imports for TraitScale")
 from ..managers.scales import TraitScale
-print(f"{__name__} calling imports for GPT Agent Setup")
+if circular_import_prints:
+    print(f"{__name__} calling imports for GPT Agent Setup")
 from ..gpt import gpt_agent_setup, gpt_helpers
-print(f"{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"{__name__} calling imports for General")
 from .general import set_up_openai_client
-print(f"{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"{__name__} calling imports for Consts")
 from . import consts, general
 
 # from . import consts
@@ -90,7 +98,7 @@ def get_or_create_base_facts(description: str, make_new=False):
         ValueError: If GPT fails to create a character after the specified number of retries.
     """
 
-    print("GET OR CREATE BASE FACTS PLAYER DESCRIPTION:", description, make_new)
+    print("\nGET OR CREATE BASE FACTS PLAYER DESCRIPTION:", description, make_new)
 
     # Check if a new character is requested by the user.
     if make_new:

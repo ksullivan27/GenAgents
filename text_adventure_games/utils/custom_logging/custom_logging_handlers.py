@@ -267,7 +267,7 @@ class QueueListenerHandler(QueueHandler):
     """
 
     def __init__(
-        self, handlers, respect_handler_level=False, auto_run=True, queue=Queue(-1)
+        self, handlers, respect_handler_level=False, auto_run=True, queue=None
     ):
         """
         Initializes a QueueListenerHandler instance with specified logging handlers and configuration options. This
@@ -279,11 +279,15 @@ class QueueListenerHandler(QueueHandler):
             respect_handler_level (bool, optional): If True, respects the logging level of each handler. Defaults to
             False.
             auto_run (bool, optional): If True, automatically starts the listener upon initialization. Defaults to True.
-            queue (Queue, optional): The queue used for log record processing. Defaults to an unbounded queue.
+            queue (Queue, optional): The queue used for log record processing. Defaults to an unbounded queue. Defaults
+            to None.
 
         Returns:
             None
         """
+
+        if queue is None:
+            queue = Queue(-1)
 
         # Call the initializer of the parent class, passing the queue to set up the logging handler.
         super().__init__(queue)

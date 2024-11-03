@@ -5,7 +5,10 @@ File: agent_cognition/act.py
 Description: defines how agents select an action given their perceptions and memory
 """
 
-print("Importing Act")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Act")
 
 import contextlib
 
@@ -20,7 +23,8 @@ from typing import TYPE_CHECKING
 
 # local imports
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (
     limit_context_length,
     get_prompt_token_count,
@@ -28,26 +32,33 @@ from text_adventure_games.gpt.gpt_helpers import (
     context_list_to_string,
 )
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import enumerate_dict_options
 
-print(f"\t{__name__} calling imports for Retrieve")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Retrieve")
 from .retrieve import Retrieve
 
-print(f"\t{__name__} calling imports for ActPrompts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for ActPrompts")
 from text_adventure_games.assets.prompts import act_prompts as ap
 
-print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
+if circular_import_prints:
+    print(f"\t{__name__} calling Type Checking imports for GptCallHandler")
 from text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 if TYPE_CHECKING:
-    print(f"\t{__name__} calling Type Checking imports for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game
 
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import Character
 
 
@@ -85,7 +96,8 @@ class Act:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tAct Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tAct Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -103,7 +115,8 @@ class Act:
             character: The character instance that will perform actions in the game.
         """
 
-        print(f"-\tInitializing Act")
+        if circular_import_prints:
+            print(f"-\tInitializing Act")
 
         # Initialize the GPT handler if it hasn't been set up yet
         Act.initialize_gpt_handler()
@@ -138,7 +151,7 @@ class Act:
         action_to_take = self.generate_action(system_prompt, user_prompt)
 
         # self._log_action(self.game, self.character, action_to_take)
-        print(f"\t{self.character.name} chose to take action: {action_to_take}")
+        print(f"\n*{self.character.name} chose to take action: {action_to_take}")
         return action_to_take
 
     def generate_action(self, system_prompt, user_prompt):
@@ -159,12 +172,9 @@ class Act:
             ValueError: If the response from the GPT handler is invalid or cannot be processed.
         """
 
-        # Uncomment the following line to set up the OpenAI client with the specified organization.
-        # client = set_up_openai_client("Helicone")
-
         # Generate a response from the GPT handler using the provided system and user prompts.
         response = self.gpt_handler.generate(
-            system=system_prompt, user=user_prompt, character=self.character
+            system=system_prompt, user=user_prompt, character=self.character, game=self.game
         )
 
         # Check if the response is a tuple, indicating a potential error related to token limits.
@@ -231,7 +241,7 @@ class Act:
 
         # Generate a string of action choices, using an inverted argument to reflect the game's action structure.
         choices_str, _ = enumerate_dict_options(
-            game_actions, names_only=True, inverted=True
+            game_actions, names_only=True, inverted=True, enumerate_results=False
         )
         system += choices_str
 
@@ -268,7 +278,7 @@ class Act:
 
         # Prepare a list of always included information for the user message.
         always_included = [
-            "\nThese are select MEMORIES in ORDER from LEAST to MOST RELEVANT:\n",
+            "These are select memories in order from least to most relevant:\n",
             f"In this location, you see: {', '.join([c.name for c in chars_in_view])}\n",
             ap.action_incentivize_exploration,
             goal_reminder,

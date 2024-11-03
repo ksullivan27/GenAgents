@@ -6,11 +6,17 @@ that the player can interact with.  A connection to an adjacent location can be 
 the player to solve before making progress).
 """
 
-print("Importing Locations")
+circular_import_prints = False
 
-print(f"\t{__name__} calling imports for Base")
+if circular_import_prints:
+    print("Importing Locations")
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Base")
 from .base import Thing
-print(f"\t{__name__} calling imports for Items")   
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Items")   
 from .items import Item
 
 class Location(Thing):
@@ -71,7 +77,8 @@ class Location(Thing):
             None
         """
         
-        print(f"-\tInitializing Location", name)
+        if circular_import_prints:
+            print(f"-\tInitializing Location", name)
 
         # Call the constructor of the parent Thing class to initialize the name and description attributes.
         super().__init__(name, description)

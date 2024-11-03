@@ -1,6 +1,10 @@
-print("Importing Base")
+circular_import_prints = False
 
-print(f"\t{__name__} calling imports for Thing, Character, Item, Location")
+if circular_import_prints:
+    print("Importing Base")
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Thing, Character, Item, Location")
 from ..things import Thing, Character, Item, Location
 import re
 

@@ -5,7 +5,10 @@ File: consts.py
 Description: get/set any necessary API keys, constant values, etc.
 """
 
-print("Importing Consts")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Consts")
 
 # Importing the json module for working with JSON data, including parsing and serialization.
 import json
@@ -20,7 +23,8 @@ from os import PathLike
 from typing import Union
 
 # Import the logging module to enable logging functionality within this script
-print(f"\t{__name__} calling imports for logging")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for logging")
 import logging
 
 # Set up the logger at the module level

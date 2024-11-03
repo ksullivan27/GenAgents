@@ -1,62 +1,58 @@
 circular_import_prints = False
 
 if circular_import_prints:
-    print("Importing Dialogue Revised")
+    print("Importing Dialogue")
 
-import tiktoken  # Importing the tiktoken library for tokenization tasks
+import tiktoken
 
 if circular_import_prints:
-    print(f"{__name__} calling imports for GptHelpers")
-from text_adventure_games.gpt.gpt_helpers import (  # Importing helper functions for GPT interactions
-    limit_context_length,  # Function to limit the context length for GPT
-    get_prompt_token_count,  # Function to count tokens in a prompt
-    GptCallHandler,  # Class to handle GPT calls
+    print(f"\t{__name__} calling imports for GptHelpers")
+from text_adventure_games.gpt.gpt_helpers import (
+    limit_context_length,
+    get_prompt_token_count,
+    GptCallHandler,
 )
 
 if circular_import_prints:
-    print(f"{__name__} calling imports for Dialogue Prompt")
-from text_adventure_games.assets.prompts import (
-    dialogue_prompt as dp,
-)  # Importing the dialogue prompt for use in the game
+    print(f"\t{__name__} calling imports for Dialogue Prompt")
+from text_adventure_games.assets.prompts import dialogue_prompt as dp
 
 if circular_import_prints:
-    print(f"{__name__} calling imports for General")
-from ..utils.general import (
-    set_up_openai_client,
-)  # Importing a utility function to set up the OpenAI client
+    print(f"\t{__name__} calling imports for General")
+from ..utils.general import set_up_openai_client
 
 if circular_import_prints:
-    print(f"{__name__} calling imports for Retrieve")
-from ..agent.agent_cognition.retrieve import (
-    Retrieve,
-)  # Importing a function to retrieve information for agent cognition
+    print(f"\t{__name__} calling imports for Retrieve")
+from ..agent.agent_cognition.retrieve import Retrieve
 
-ACTION_MAX_OUTPUT = 100  # Constant defining the maximum output length for actions
+ACTION_MAX_OUTPUT = 100
 
 class Dialogue:
     """
-    Manages the dialogue between two characters in a text adventure game.
-    It facilitates interactions, updates character instructions, and handles GPT responses.
+    Represents a dialogue system for managing interactions between two game characters. This class handles the
+    initialization of participants, manages dialogue history, and interfaces with a GPT model to generate character
+    responses based on their instructions and memories.
 
     Args:
-        game (Game): The game instance managing the overall game state.
-        participants (List[Character]): Sorted list of characters by initiative.
-        command (str): The initial command or intent of the dialogue.
+        game: The game context in which the dialogue takes place.
+        participants (List[Character]): A sorted list of characters participating in the dialogue, ordered by
+        initiative.
+        command: The initial command or intent that starts the dialogue.
 
     Attributes:
-        game (Game): The game instance.
-        gpt_handler (GptCallHandler): Handler for GPT interactions.
-        token_offset (int): Offset for token management.
-        offset_pad (int): Padding for token limits.
-        model_context_limit (int): Maximum token limit for the model.
-        participants (List[Character]): List of dialogue participants.
-        characters_system (dict): System instructions for each character.
-        characters_user (dict): User instructions for each character.
-        participants_number (int): Number of participants in the dialogue.
-        command (str): The command initiating the dialogue.
-        dialogue_history (List[str]): History of dialogue exchanges.
-        dialogue_history_token_count (int): Token count of the dialogue history.
-        characters_mentioned (List[str]): List of characters mentioned in the dialogue.
+        game: The game context.
+        gpt_handler: An instance of the GPT handler for generating responses.
+        token_offset: An offset for managing token limits.
+        offset_pad: A padding value for token calculations.
+        model_context_limit: The maximum token limit for the GPT model.
+        participants: The list of dialogue participants.
+        characters_system: A dictionary storing system instructions for each character.
+        characters_user: A dictionary storing user instructions for each character.
+        participants_number: The number of participants in the dialogue.
+        command: The command that initiated the dialogue.
+        dialogue_history: A list tracking the history of dialogue exchanges.
+        dialogue_history_token_count: The token count of the dialogue history.
+        characters_mentioned: A list of characters mentioned during the dialogue.
     """
 
     gpt_handler = None  # Class-level attribute to store the shared GPT handler
@@ -116,32 +112,30 @@ class Dialogue:
         # Initialize the GPT handler if it hasn't been set up yet
         Dialogue.initialize_gpt_handler()
 
-        # Assign the game instance to the instance variable
+        # Store the game context in the instance variable
         self.game = game
 
-        # Initialize token offset for managing token limits
+        # Initialize token offset and padding for managing token limits
         self.token_offset = 0
-
-        # Set padding for token limits
         self.offset_pad = 5
 
-        # Define the maximum token limit for the model based on the GPT handler
+        # Set the maximum token limit for the GPT model
         self.model_context_limit = self.gpt_handler.model_context_limit
 
         # Store the participants in the dialogue
         self.participants = participants
 
-        # Initialize dictionaries to hold system and user instructions for characters
+        # Initialize dictionaries to hold system and user instructions for each character
         self.characters_system = {}
         self.characters_user = {}
 
         # Count the number of participants in the dialogue
         self.participants_number = len(participants)
 
-        # Store the initial command for the dialogue
+        # Store the initial command that starts the dialogue
         self.command = command
 
-        # Initialize the dialogue history with a starting message
+        # Initialize the dialogue history with the starting message
         self.dialogue_history = [
             f"{self.participants[0].name} wants to {self.command}. The dialogue just started."
         ]
@@ -158,70 +152,57 @@ class Dialogue:
 
         # Iterate over each participant to set up their instructions
         for participant in self.participants:
-            # Initialize a dictionary for the character's system instructions using their name as the key
+            # Add each participant to the characters system dictionary using their name as the key
             self.characters_system[participant.name] = dict()
-
-            # Initialize a dictionary for the character's user instructions using their name as the key
             self.characters_user[participant.name] = dict()
 
-            # Update the character's system instructions
+            # Update the character's system instructions, including intro, impressions, and memories
             self.update_system_instruction(participant)
-
-            # Update the character's user instructions, including impressions and memories
             self.update_user_instruction(
                 participant,
                 update_impressions=True,  # Indicate that impressions should be updated
                 update_memories=True,  # Indicate that memories should be updated
                 system_instruction_token_count=self.get_system_instruction(participant)[
-                    0  # Get the token count of the system instruction for the participant
-                ],
+                    0
+                ],  # Get the token count for the system instructions
             )
 
     def get_user_instruction(self, character):
         """
-        Retrieves the user instructions for a specified character.
-        This includes the token count and string representation of the character's impressions, memories, and dialogue
-        history.
-
-        Args:
-            character (Character): The character whose user instructions are to be retrieved.
-
-        Returns:
-            tuple: A tuple containing the total token count and the combined string representation of the character's
-                impressions, memories, and dialogue history.
-        """
-
-        # Retrieve the dictionary of user instruction components for the specified character
-        char_inst_comp = self.characters_user[character.name]
-
-        # Return a tuple containing:
-        # 1. The total token count, which is the sum of the token counts for impressions, memories, and dialogue history.
-        # 2. The combined string representation of impressions, memories, and dialogue history.
-        return (
-            char_inst_comp["impressions"][0]  # Token count for impressions
-            + char_inst_comp["memories"][0]  # Token count for memories
-            + char_inst_comp["dialogue_history"][0],  # Token count for dialogue history
-            char_inst_comp["impressions"][1]  # String representation for impressions
-            + char_inst_comp["memories"][1]  # String representation for memories
-            + char_inst_comp["dialogue_history"][
-                1
-            ],  # String representation for dialogue history
-        )
-
-    def get_system_instruction(self, character):
-        """Retrieve the system instruction for a specified character.
-
-        This function accesses the character's system prompt components and returns
-        a tuple containing the token count and string representation of the system
+        Retrieves the user instructions for a specified character, including their impressions, memories, and dialogue
+        history. This method returns both the total token count and the string representation of the user's
         instructions.
 
         Args:
-            character: The character for which to retrieve the system instruction.
+            character: The character whose user instructions are to be retrieved.
 
         Returns:
-            tuple: A tuple where the first element is the token count of the system
-            instructions and the second element is the string representation of the
-            instructions.
+            tuple: A tuple containing the total token count and the string representation of the user instructions.
+        """
+
+        # get this character's dictionary of system prompt components
+        char_inst_comp = self.characters_user[character.name]
+
+        # return a tuple containing the system instructions token count and string representation
+        return (
+            char_inst_comp["impressions"][0]
+            + char_inst_comp["memories"][0]
+            + char_inst_comp["dialogue_history"][0],
+            char_inst_comp["impressions"][1]
+            + char_inst_comp["memories"][1]
+            + char_inst_comp["dialogue_history"][1],
+        )
+
+    def get_system_instruction(self, character):
+        """
+        Retrieves the system instructions for a specified character, focusing on their introductory information. This
+        method returns both the token count and the string representation of the character's system instructions.
+
+        Args:
+            character: The character whose system instructions are to be retrieved.
+
+        Returns:
+            tuple: A tuple containing the token count and the string representation of the system instructions.
         """
 
         # get this character's dictionary of system prompt components
@@ -237,60 +218,61 @@ class Dialogue:
         update_memories=False,
         system_instruction_token_count=0,
     ):
-        """Update the user's instructions based on character impressions and memories.
-
-        This function modifies the user's character data by updating impressions of other
-        characters and relevant memories. It also manages the dialogue history to ensure it
-        fits within the model's context limits.
+        """
+        Updates the user instructions for a specified character, including their impressions, memories, and dialogue
+        history. This method allows for the optional updating of impressions and memories, ensuring that the character's
+        instructions are current and relevant for the dialogue context.
 
         This method constructs and updates the user instructions which include the impressions, the memory and the
-        dialogue history. Currently, the impressions are also passed in without being shortened. The memories are
+        dialog history. Currently, the impressions are also passed in without being shortened. The memories are
         reduced if necessary to fit into GPT's context. Note that these aren't returned, but rather are stored in the
         characters system dictionary as a dictionary of lists. Each component serves as a dictionary key, and its value
         is a list where the first index is the component's token count and the second is its string representation.
 
         Args:
-            character: The character whose instructions are being updated.
-            update_impressions (bool, optional): Flag to indicate if impressions should be updated. Defaults to False.
-            update_memories (bool, optional): Flag to indicate if memories should be updated. Defaults to False.
-            system_instruction_token_count (int, optional): The token count of the system instruction. Defaults to 0.
+            character: The character whose user instructions are to be updated.
+            update_impressions (bool, optional): Indicates whether to update the character's impressions. Defaults to
+            False.
+            update_memories (bool, optional): Indicates whether to update the character's memories. Defaults to False.
+            system_instruction_token_count (int, optional): The token count of the system instructions for the
+            character. Defaults to 0.
 
         Returns:
-            None: This function updates the character's data in place and does not return a value.
+            None
         """
 
         ### IMPRESSIONS OF OTHER CHARACTERS###
+        # Check if impressions need to be updated
         if update_impressions:
-            # Attempt to retrieve and update impressions of other game characters
+            # Retrieve impressions of other game characters
             try:
-                # Get multiple impressions from the character's impressions
                 impressions = character.impressions.get_multiple_impressions(
                     self.game.characters.values()
                 )
-                # Format the impressions into a string with a header
+                # Format the impressions into a readable string
                 impressions = (
                     "YOUR IMPRESSIONS OF OTHERS:\n" + "\n".join(impressions) + "\n\n"
                 )
 
-                # Calculate the token count for the formatted impressions
+                # Calculate the token count for the impressions string
                 impressions_token_count = get_prompt_token_count(
                     content=impressions, role=None, pad_reply=False
                 )
 
-                # Store the impressions token count and string in the user's character data
+                # Update the character's impressions in the characters system dictionary
                 self.characters_user[character.name]["impressions"] = (
                     impressions_token_count,
                     impressions,
                 )
             except AttributeError:
-                # If an error occurs, set impressions to a default value
+                # If the character has no impressions, set default values
                 self.characters_user[character.name]["impressions"] = (0, "")
 
         ### MEMORIES OF CHARACTERS IN DIALOGUE/MENTIONED ###
 
-        # Check if memories should be updated
+        # Check if memories need to be updated
         if update_memories:
-            # Construct a query based on the current command and mentioned characters
+            # Create a query string based on the current command and mentioned characters
             query = self.command
             query += ", ".join(self.characters_mentioned)
 
@@ -301,12 +283,12 @@ class Dialogue:
                     "These are select MEMORIES in ORDER from MOST to LEAST RELEVANT:\n"
                 ] + [m + "\n" for m in list(context_list)]
 
-                # Get the impressions token count for the character
+                # Get the token count for the character's impressions
                 impressions_token_count = self.characters_user[character.name][
                     "impressions"
                 ][0]
 
-                # Limit the memories to fit within the model's context by trimming
+                # Limit the memories to fit within the GPT's context by trimming less relevant memories
                 memories_limited = limit_context_length(
                     history=context_list,
                     max_tokens=self.model_context_limit
@@ -318,7 +300,7 @@ class Dialogue:
                     keep_most_recent=False,
                 )
 
-                # Convert the list of limited memories into a single formatted string
+                # Convert the list of limited memories into a single string
                 memories_limited_str = "".join([f"{m}\n" for m in memories_limited])
 
                 # Calculate the token count for the limited memories string
@@ -326,18 +308,18 @@ class Dialogue:
                     content=memories_limited_str, role=None, pad_reply=False
                 )
 
-                # Update the character's memories in the user's character data
+                # Update the character's memories in the characters system dictionary
                 self.characters_user[character.name]["memories"] = (
                     memories_limited_token_count,
                     memories_limited_str,
                 )
 
             else:
-                # If no memories are found, set a default message
+                # If no memories are found, set default values
                 self.characters_user[character.name]["memories"] = (2, "No memories")
 
         # Update the dialogue history
-        # Limit the number of dialogue messages to fit within the model's context
+        # Limit the number of dialogue messages to fit within GPT's context
         limited_dialog = limit_context_length(
             history=self.get_dialogue_history_list(),
             max_tokens=self.model_context_limit
@@ -347,7 +329,7 @@ class Dialogue:
             - self.gpt_handler.max_output_tokens,
         )
 
-        # Join the limited dialogue messages into a single string
+        # Convert the limited dialogue to a single string
         dialog_str = "\n".join(limited_dialog)
 
         # Calculate the token count for the current dialogue history
@@ -355,121 +337,103 @@ class Dialogue:
             content=dialog_str, role=None, pad_reply=False
         )
 
-        # Format the dialogue history prompt for the GPT model
+        # Format the dialogue history for the GPT prompt
         dialogue_history_prompt = dp.gpt_dialogue_user_prompt.format(
             character=character.name, dialogue_history=dialog_str
         )
 
-        # Update the character's dialogue history in the user's character data
+        # Update the character's dialogue history in the characters system dictionary
         self.characters_user[character.name]["dialogue_history"] = (
             dialogue_history_token_count,
             dialogue_history_prompt,
         )
 
     def update_system_instruction(self, character):
-        """Update the system instruction for a specified character.
-
-        This function constructs the system prompt for a character by combining their
-        standard information with dialogue instructions based on other participants in the
-        game. It also calculates the token count for the system prompt and updates the
-        character's information in the system dictionary.
-
-        This method constructs and updates the system instructions which now only includes the intro (updated). The
-        intro must be included without trimming. Each component serves as a dictionary key, and its value is a list
-        where the first index is the component's token count and the second is its string representation.
+        """
+        Updates the system instructions for a specified character, focusing on their introductory information and
+        dialogue context. This method constructs the system prompt by incorporating the character's standard information
+        and the names of other participants in the dialogue.
 
         Args:
-            character: The character for whom the system instruction is being updated.
+            character: The character whose system instructions are to be updated.
 
         Returns:
-            None: This function updates the character's system instruction in place and does not return a value.
+            None
         """
 
         ### REQUIRED START TO SYSTEM PROMPT (CAN'T TRIM) ###
-        # Retrieve the standard information for the specified character
         intro = character.get_standard_info(self.game)
 
-        # Construct a string of dialogue instructions by joining the names of other participants
+        # add dialogue instructions
         other_character = ", ".join(
             [x.name for x in self.participants if x.name != character.name]
         )
-        # Append the formatted dialogue system prompt to the intro
         intro += dp.gpt_dialogue_system_prompt.format(other_character=other_character)
 
-        # Calculate the token count for the constructed system prompt intro
+        # get the system prompt intro token count
         intro_token_count = get_prompt_token_count(
             content=intro, role="system", pad_reply=False
         )
 
-        # Add the token count for the user role, including padding for GPT's reply
+        # account for the number of tokens in the resulting role (just the word 'user'),
+        # including a padding for GPT's reply containing <|start|>assistant<|message|>
         intro_token_count += get_prompt_token_count(
             content=None, role="user", pad_reply=True
         )
 
-        # Update the character's intro information in the system dictionary with the token count and intro string
+        # update the character's intro in the characters system dictionary
         self.characters_system[character.name]["intro"] = (intro_token_count, intro)
 
     def get_dialogue_history_list(self):
-        """Retrieve the list of dialogue history.
-
-        This function returns the stored dialogue history, which contains the
-        interactions that have occurred in the conversation. It provides access
-        to the dialogue data for further processing or analysis.
-
-        Args:
-            None
+        """
+        Retrieves the list of dialogue history for the current conversation. This method provides access to the recorded
+        exchanges that have occurred during the dialogue.
 
         Returns:
-            list: The list of dialogue history entries.
+            list: A list containing the history of dialogue exchanges.
         """
 
         return self.dialogue_history
 
     def get_dialogue_history(self):
-        """Retrieve the dialogue history as a formatted string.
-
-        This function concatenates the entries in the dialogue history into a single
-        string, with each entry separated by a newline. It provides a readable format
-        of the conversation for display or logging purposes.
-
-        Args:
-            None
+        """
+        Retrieves the dialogue history as a single formatted string. This method concatenates all recorded exchanges in
+        the dialogue, separating them with newline characters for readability.
 
         Returns:
-            str: A string representation of the dialogue history, with entries separated by newlines.
+            str: A string representation of the dialogue history, with each exchange on a new line.
         """
 
         return "\n".join(self.dialogue_history)
 
     def add_to_dialogue_history(self, message):
-        """Add a message to the dialogue history.
-
-        This function appends a new message to the existing dialogue history,
-        allowing for the accumulation of conversation entries over time. It
-        ensures that all interactions are recorded for future reference.
+        """
+        Adds a new message to the dialogue history. This method appends the provided message to the list of recorded
+        exchanges, allowing for the tracking of the conversation's progression.
 
         Args:
             message (str): The message to be added to the dialogue history.
 
         Returns:
-            None: This function updates the dialogue history in place and does not return a value.
+            None
         """
 
         self.dialogue_history.append(message)
 
     def get_gpt_response(self, character):
-        """Generate a response from the GPT model for a specified character.
-
-        This function retrieves the necessary system and user instructions, checks if the
-        combined token count exceeds the model's context limit, and updates the user
-        instructions if necessary. It then generates a response from the GPT model and
-        handles any potential errors related to token limits.
+        """
+        Generates a response from the GPT model for a specified character based on their system and user instructions.
+        This method handles token limits and updates the character's instructions as necessary to ensure a valid
+        response is generated.
 
         Args:
-            character: The character for whom the GPT response is being generated.
+            character: The character for whom the GPT response is to be generated.
 
         Returns:
-            str or None: The generated response from the GPT model, or None if an error occurs.
+            str: The generated response from the GPT model.
+
+        Raises:
+            Exception: If there is a bad request error due to exceeding token limits.
         """
 
         # Get the system instruction token count and string representation.
@@ -518,68 +482,46 @@ class Dialogue:
         return response
 
     def is_dialogue_over(self):
-        """Determine if the dialogue has concluded.
-
-        This function checks the number of participants in the dialogue. If there is one
-        or no participant, it indicates that the dialogue is over.
-
-        Args:
-            None
+        """
+        Determines whether the dialogue has concluded based on the number of participants. This method checks if there
+        is one or no participants left in the dialogue, indicating that the conversation is over.
 
         Returns:
-            bool: True if the dialogue is over, otherwise False.
+            bool: True if the dialogue is over (one or no participants), otherwise False.
         """
 
         return len(self.participants) <= 1
 
     def dialogue_loop(self):
-        """Manage the interactive dialogue loop among participants.
-
-        This function initiates a dialogue session, allowing each participant to respond
-        in turn while monitoring for new characters mentioned and potential conversation
-        termination conditions. It continues the dialogue until a specified number of
-        iterations is reached or if the conversation ends prematurely.
-
-        Args:
-            None
+        """
+        Manages the dialogue loop for the participants in the conversation. This method facilitates the interaction
+        between characters, updates their instructions, retrieves responses from the GPT model, and handles the flow of
+        dialogue until the conversation ends or a specified limit is reached.
 
         Returns:
-            list: The complete dialogue history recorded during the session.
+            list: The updated dialogue history after the loop concludes.
         """
         
         if circular_import_prints:
-            print(f"{__name__} calling imports for Parser")
+            print(f"\t{__name__} calling imports for Parser")
         from ..parsing import Parser
 
-        # Initialize a counter to limit the duration of the dialogue loop
         i = 10  # Counter to avoid dialogue dragging on for too long
-        print(f"\n{'~'*25} Dialogue started successfully {'~'*25}")
-
-        # Begin the dialogue loop, allowing for a maximum of 10 iterations
+        print(f"\n{'~'*10} Dialogue started successfully {'~'*10}")
         while i > 0:
-            # Iterate over each character participating in the dialogue
             for character in self.participants:
-                # Retrieve the last line of dialogue to analyze for new character mentions
+                # Get last line of dialogue and if any new characters are mentioned update system prompts
                 last_line = self.dialogue_history[-1]
-                # Extract keywords from the last line, specifically looking for character names
                 keywords = self.game.parser.extract_keywords(last_line).get(
                     "characters", None
                 )
-                update_memories = (
-                    False  # Flag to determine if memories need to be updated
-                )
-
-                # If keywords (character names) are found in the last line
+                update_memories = False
                 if keywords:
                     for k in keywords:
-                        # Check if the character is not already mentioned
                         if k not in self.characters_mentioned:
-                            update_memories = True  # Set flag to update memories
-                            self.characters_mentioned.append(
-                                k
-                            )  # Add new character to the list
+                            update_memories = True
+                            self.characters_mentioned.append(k)
 
-                # Update the user's instructions based on the current character and any new mentions
                 self.update_user_instruction(
                     character,
                     update_impressions=False,
@@ -588,35 +530,22 @@ class Dialogue:
                         character
                     )[0],
                 )
-
-                # Get the response from the GPT model for the current character
+                # Get GPT response
                 response = self.get_gpt_response(character)
-                # Format the response to include the character's name
                 response = f"{character.name}: {response}"
-                print(f"\n-{Parser.wrap_text(response)}")  # Print the character's response
-                self.add_to_dialogue_history(
-                    response
-                )  # Add the response to the dialogue history
+                print(f"\n-{Parser.wrap_text(response)}")
+                self.add_to_dialogue_history(response)
 
-                # The following lines are commented out but could be used to update the token count
+                # update the dialog history token count with the latest reply
                 # response_token_count = get_prompt_token_count(content=response, role=None, pad_reply=False)
                 # self.dialogue_history_token_count += response_token_count
 
-                # Check if the response indicates that a character is leaving the conversation
+                # End conversation if a character leaves
                 if "I leave the conversation" in response:
-                    self.participants.remove(
-                        character
-                    )  # Remove the character from the participants
-                    print(
-                        "\nThe conversation is over"
-                    )  # Notify that the conversation has ended
-                    break  # Exit the for loop if a character leaves
-
-            # Check if the dialogue is over based on the number of participants
+                    self.participants.remove(character)
+                    print("The conversation is over")
+                    break
             if self.is_dialogue_over():
-                break  # Exit the while loop if the dialogue is over
-
-            i -= 1  # Decrement the counter to eventually end the loop
-
-        # Return the complete dialogue history recorded during the session
+                break
+            i -= 1
         return self.dialogue_history

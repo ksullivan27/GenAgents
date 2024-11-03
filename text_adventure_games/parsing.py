@@ -6,7 +6,10 @@ potential for improvement using modern natural language processing. The implemen
 simple keyword matching.
 """
 
-print("Importing Parser")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Parser")
 
 # Import necessary modules and types for the text adventure game parsing functionality
 from typing import TYPE_CHECKING  # For conditional type checking
@@ -31,32 +34,40 @@ from jellyfish import (
 nltk.download("wordnet")
 
 # Importing game-related classes and functions
-print(f"\t{__name__} calling imports for Character")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Character")
 from .things import Character  # Character class from the things module
 
 if TYPE_CHECKING:
-    print(f"\t{__name__} calling type checking imports for Item and Location")
+    if circular_import_prints:
+        print(f"\t{__name__} calling type checking imports for Item and Location")
     from .things import Item, Location  # Conditional imports for type checking
 
-    print(f"\t{__name__} calling type checking imports for Thing")
+    if circular_import_prints:
+        print(f"\t{__name__} calling type checking imports for Thing")
     from text_adventure_games.things.base import Thing  # Base class for game objects
 
-print(f"\t{__name__} calling imports for Actions")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Actions")
 from . import actions  # Importing actions module
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from .utils.consts import get_models_config
 
-print(f"\t{__name__} calling imports for Normalize Name")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Normalize Name")
 from .utils.general import (
     normalize_name
 )  # Utility function to normalize names
 
-print(f"\t{__name__} calling imports for ActionSequence")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for ActionSequence")
 from text_adventure_games.actions.base import ActionSequence  # Action sequence handling
 
 # Importing GPT-related helper functions
-print(f"\t{__name__} calling imports for GptCallHandler")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptCallHandler")
 from .gpt.gpt_helpers import (
     GptCallHandler,  # Handler for GPT calls
     limit_context_length,  # Function to limit context length
@@ -67,7 +78,8 @@ from .gpt.gpt_helpers import (
     get_token_remainder,
 )  # Function to get remaining tokens
 
-print(f"\t{__name__} calling imports for MemoryType")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for MemoryType")
 from .agent.memory_stream import MemoryType  # Memory type for agent's memory stream
 
 
@@ -105,7 +117,8 @@ class Parser:
             echo_commands (bool, optional): Whether to print user commands. Defaults to False.
         """
 
-        print(f"-\tInitializing Parser")
+        if circular_import_prints:
+            print(f"-\tInitializing Parser")
 
         # Initialize a list to store the commands issued by the player
         # along with the corresponding responses provided by the game.
@@ -161,7 +174,7 @@ class Parser:
             thing (Thing): The object or entity related to the command.
         """
 
-        print(Parser.wrap_text(description))
+        print(f"\n{Parser.wrap_text(description)}")
 
     @staticmethod
     def wrap_text(text: str, width: int = 80) -> str:
@@ -1482,7 +1495,7 @@ class GptParser(Parser):
         self.add_description_to_history(response)
 
         # Print the wrapped response for console output, ensuring it is formatted for readability.
-        print(self.wrap_text(response) + "\n")
+        print(f"\n{self.wrap_text(response)}")
 
 
 class GptParser2(GptParser):

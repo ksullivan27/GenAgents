@@ -1,13 +1,19 @@
-print("Importing Scales")
+
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Scales")
 
 # Imports
 from collections import namedtuple
 from typing import List
 
 # local imports
-print(f"\t{__name__} calling imports for GptAgentSetup")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptAgentSetup")
 from ..gpt.gpt_agent_setup import get_target_adjective
-print(f"\t{__name__} calling imports for Character")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Character")
 from ..things.characters import Character
 
 

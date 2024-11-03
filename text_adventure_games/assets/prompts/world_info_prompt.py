@@ -16,16 +16,26 @@ Description: This is the universal information that agents will have access to a
 # You may only talk to characters in your same location. If they are not here, then you need to move first to where their location.
 # """
 
+# world_info = (
+#     "Your goal in this intense game show is to locate a hidden idol concealed somewhere on the island. Time is of "
+#     "the essence, as the first contestant to discover it claims victory. To succeed in your quest, you'll require "
+#     "a vital tool that's in limited supply. Act swiftly to secure your advantage in the hunt.\n\nThe island offers "
+#     "a myriad of locations to explore, including the camp, beach, ocean, cliffs, jungle_path, well, and jungle. "
+#     "Each location holds its secrets, and you may only converse with characters present in your current location. "
+#     "Should they be absent, you must navigate to their whereabouts before engaging them.\n\nKeep in mind that a "
+#     "crucial clue to uncovering the idol's whereabouts is hidden somewhere amidst the island's terrain.\n\nThere "
+#     "are currently {contestant_count} more contestants, including you. The others are: {contestant_names_locs}.\n\n"
+#     "Stay vigilant, and may the quickest seeker emerge triumphant!"
+# )
+
 world_info = (
-    "Your goal in this intense game show is to locate a hidden idol concealed somewhere on the island. Time is of "
-    "the essence, as the first contestant to discover it claims victory. To succeed in your quest, you'll require "
-    "a vital tool that's in limited supply. Act swiftly to secure your advantage in the hunt.\n\nThe island offers "
-    "a myriad of locations to explore, including the camp, beach, ocean, cliffs, jungle_path, well, and jungle. "
-    "Each location holds its secrets, and you may only converse with characters present in your current location. "
-    "Should they be absent, you must navigate to their whereabouts before engaging them.\n\nKeep in mind that a "
-    "crucial clue to uncovering the idol's whereabouts is hidden somewhere amidst the island's terrain.\n\nThere "
-    "are currently {contestant_count} more contestants, including you. The others are: {contestant_names_locs}.\n\n"
-    "Stay vigilant, and may the quickest seeker emerge triumphant!"
+    "You are competing in a game show where you can be voted out by your fellow contestants at the end of a round. "
+    "There are currently {contestant_count} more contestants, including you. The others are: {contestant_names_locs}. "
+    "You may only talk to characters in your same location. If they are not here, then you need to move first to where "
+    "their location. When {n_finalists} contestants remain, a jury of the contestants you have voted off will vote for "
+    "a winner! This means there are {rounds_until_finals} rounds until the finals. You have {turns_left_this_round} "
+    "more turns this round before you will vote. There could be an idol hiding somewhere in the game that grants you "
+    "immunity from a vote when you have it in your possession. Explore to find it!!"
 )
 
 discovery_world_info = (

@@ -5,7 +5,10 @@ File: utils/general.py
 Description: helper methods used throughout the project
 """
 
-print("Importing General")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing General")
 
 # Importing defaultdict from collections for creating dictionaries with default values.
 from collections import defaultdict
@@ -41,7 +44,8 @@ from openai import OpenAI
 # from GenAgentsBoardroom.text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 # Local imports from the current package, specifically constants used in the module.
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from . import consts
 
 
@@ -127,16 +131,17 @@ def get_logger_extras(game, character=None, include_gpt_call_id=False, stack_lev
         AttributeError: If the character does not have the expected attributes.
     """
 
-    # Import GptCallHandler here to avoid circular import issues
-    print(f"\t{__name__} interior calling imports for GptCallHandler")
+    if circular_import_prints:
+        # Import GptCallHandler here to avoid circular import issues
+        print(f"\t{__name__} interior calling imports for GptCallHandler")
     from ..gpt.gpt_helpers import GptCallHandler
 
-    # # Get the filename of the module that called this function
-    # module_name = inspect.stack()[stack_level].filename
-    # # Remove the .py extension
-    # module_name = os.path.splitext(module_name)[0]
-    # # Capitalize name
-    # module_name = module_name.title()
+    # Get the filename of the module that called the module that called the module that made this function call
+    prev_module_name = inspect.stack()[stack_level + 1].filename
+    # Remove the .py extension
+    prev_module_name = os.path.splitext(prev_module_name)[0]
+    # Capitalize name
+    prev_module_name = prev_module_name.title()
 
     if include_gpt_call_id:
         gpt_call_id = GptCallHandler.get_calls_count()
@@ -144,11 +149,12 @@ def get_logger_extras(game, character=None, include_gpt_call_id=False, stack_lev
         gpt_call_id = "N/A"
 
     return {
+        "prev_module_name": prev_module_name,
         "gpt_call_id": gpt_call_id,
         "character_name": character.name if character else "none",
         "character_id": character.id if character else "none",
         "character_group": character.group if character else "none",
-        "action_location": character.location.name if character else "none",
+        "action_location": character.location.name if character and character.location else "none",
         "round": game.round,
         "tick": game.tick,
         "total_ticks": game.total_ticks,
@@ -500,7 +506,7 @@ def find_difference_in_dict_lists(dict1, dict2):
     return diff
 
 
-def enumerate_dict_options(options, names_only=False, inverted=False):
+def enumerate_dict_options(options, names_only=False, inverted=False, enumerate_results=True):
     """
     Generates a formatted string of enumerated options from a dictionary, with the ability to customize the output based
     on the provided parameters. This function can return either just the names of the options or include both keys and
@@ -512,6 +518,7 @@ def enumerate_dict_options(options, names_only=False, inverted=False):
         names_only (bool, optional): If True, only the names (keys) will be included in the output. Defaults to False.
         inverted (bool, optional): If True, the enumeration will use the keys as values and vice versa. Defaults to
         False.
+        enumerate_results (bool, optional): If True, the results will be enumerated. Defaults to True.
 
     Returns:
         tuple: A tuple containing the formatted string of options and a list of the dictionary keys.
@@ -532,17 +539,26 @@ def enumerate_dict_options(options, names_only=False, inverted=False):
         if inverted:
             # Enumerate through the keys (option names) of the options dictionary and create a numbered list of names.
             for i, name in enumerate(options.keys()):
-                choices_str += "{i}. {n}\n".format(i=i, n=name)
+                if enumerate_results:
+                    choices_str += "{i}. {n}\n".format(i=i, n=name)
+                else:
+                    choices_str += "{n}\n".format(n=name)
         else:
             # Enumerate through the values of the options dictionary and create a numbered list of names.
             for i, name in enumerate(options.values()):
-                choices_str += "{i}. {n}\n".format(i=i, n=name)
+                if enumerate_results:
+                    choices_str += "{i}. {n}\n".format(i=i, n=name)
+                else:
+                    choices_str += "{n}\n".format(n=name)
         # Return the formatted choices string and None since no keys are needed.
         return choices_str, None
     else:
         # If names_only is False, create a numbered list that includes both values and keys.
         for i, (k, v) in enumerate(options.items()):
-            choices_str += "{i}. {v}: {k}\n".format(i=i, v=v, k=k)
+            if enumerate_results:
+                choices_str += "{i}. {v}: {k}\n".format(i=i, v=v, k=k)
+            else:
+                choices_str += "{v}: {k}\n".format(v=v, k=k)
         # Return the formatted choices string along with the list of option keys.
         return choices_str, options_list
 
