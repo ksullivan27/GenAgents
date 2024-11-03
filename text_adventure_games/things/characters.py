@@ -50,6 +50,7 @@ GROUP_MAPPING = {
     "E": (False, False),
 }
 
+
 class Character(Thing):
     """
     Represents a character in the game, inheriting from the Thing class. This class manages the character's attributes,
@@ -84,7 +85,7 @@ class Character(Thing):
         Returns:
             None
         """
-        
+
         print(f"-\tInitializing Character", name)
 
         # Call the initializer of the parent class (Thing) to set up the name and description attributes for the
@@ -206,7 +207,7 @@ class Character(Thing):
         Returns:
             Character: An instance of the character class populated with the provided data.
         """
-        
+
         print(f"-\tFrom Primitive: Character {data['name']}")
 
         # Create a new instance of the character class using the provided name, description, and persona
@@ -362,17 +363,17 @@ class GenerativeAgent(Character):
 
         # Set the cognitive group for the agent and determine if goals and impressions will be used based on the group.
         self.group = group
-        
+
         print("GROUP:", self.group)
-        
+
         self.use_goals, self.use_impressions = GROUP_MAPPING[self.group]
-        
+
         print("USE GOALS:", self.use_goals)
         print("USE IMPRESSIONS:", self.use_impressions)
 
         # Assign the agent's persona and initialize impressions and goals based on cognitive settings.
         self.persona = persona
-        
+
         # Initialize the impressions for the agent based on whether impressions are used.
         self.impressions = Impressions(self) if self.use_impressions else None
 
@@ -520,7 +521,9 @@ class GenerativeAgent(Character):
         # Return the complete summary string
         return summary
 
-    def get_goals(self, round=-1, priority="all", as_str=False):
+    def get_goals(
+        self, round=-1, priority="all", as_str=False, include_scores=False
+    ):
         """
         Retrieve the agent's current goals based on the specified round and priority.
         This method returns the goals if the agent is configured to use them; otherwise, it returns None.
@@ -542,7 +545,19 @@ class GenerativeAgent(Character):
         # Check if the agent is configured to use goals.
         return (
             # If goals are enabled, retrieve the goals for the current round with the specified priority and format.
-            self.goals.get_goals(round=round, priority=priority, as_str=as_str)
+            self.goals.get_goals(
+                round=round,
+                priority=priority,
+                include_node_ids=False,
+                include_description=True,
+                include_priority_levels=True,
+                include_scores=include_scores,
+                progress_as_percentage=False,
+                to_str=as_str,
+                list_prefix="",
+                join_str="\n",
+                sep_initial=False,
+            )
             # If goals are not enabled, return None.
             if self.use_goals
             else None
@@ -715,7 +730,19 @@ class GenerativeAgent(Character):
         # If the agent has goals, include them in the data representation
         if self.goals:
             thing_data["use_goals"] = True
-            thing_data["goals"] = self.goals.get_goals()
+            thing_data["goals"] = self.goals.get_goals(
+                round=-1,
+                priority="all",
+                include_node_ids=False,
+                include_description=True,
+                include_priority_levels=True,
+                include_scores=True,
+                progress_as_percentage=False,
+                to_str=False,
+                list_prefix="",
+                join_str="\n",
+                sep_initial=False,
+            )
         else:
             thing_data["use_goals"] = False
             thing_data["goals"] = None
@@ -751,7 +778,7 @@ class GenerativeAgent(Character):
         Returns:
             Character: A fully constructed character instance with initialized attributes.
         """
-        
+
         print(f"-\tFrom Primitive: Character {data['name']}")
 
         # Create a new instance of the character class using the provided name, description, and persona

@@ -901,7 +901,7 @@ class GptParser(Parser):
 
         # Define a dictionary containing the parameters needed to configure the GPT model.
         model_params = {
-            "max_tokens": 400,  # Set the maximum number of tokens for the model's output.
+            # "max_tokens": 400,  # Set the maximum number of tokens for the model's output.
             "temperature": 1,  # Control the randomness of the output; higher values produce more varied responses.
             "top_p": 1,  # Set the cumulative probability for token selection; 1 means all tokens are considered.
             "max_retries": 5,  # Define the maximum number of retries for API calls in case of failure.

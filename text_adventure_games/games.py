@@ -1861,13 +1861,16 @@ class SurvivorGame(Game):
         with open(fp, mode="w") as f:
             # Create a dictionary of character names and their goal scores, defaulting to "None" if no scores exist
             output = {
-                name: c.get_goal_scores() or "None"
+                name: c.get_goals(round=-1, priority="all", include_scores=True)
+                or "None"
                 for name, c in self.characters.items()
             }
 
             # Add goal scores for jury members to the output dictionary
             for name, c in self.jury.items():
-                output[name] = c.get_goal_scores() or "None"
+                output[name] = c.get_goals(
+                    round=-1, priority="all", include_scores=True
+                ) or "None"
 
             # Write the character goal scores to the JSON file
             json.dump(output, f, indent=4)
