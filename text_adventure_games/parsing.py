@@ -177,7 +177,7 @@ class Parser:
         print(f"\n{Parser.wrap_text(description)}")
 
     @staticmethod
-    def wrap_text(text: str, width: int = 80) -> str:
+    def wrap_text(text: str, width: int = 120) -> str:
         """
         Wraps the given text to a specified width for better readability.
 
@@ -1026,6 +1026,7 @@ class GptParser(Parser):
         using the GPT model.
 
         Args:
+            game (Game): The game instance associated with this GPT call.
             command (str): The command string representing the action taken by the character.
             description (str): A description of the outcome of the action.
             character (Character): The character who performed the action.
@@ -1044,7 +1045,10 @@ class GptParser(Parser):
         # Call the function to generate a summary of the action statement using the GPT model.
         # The outcome string is passed along with the GPT handler and a limit on the number of tokens for the response.
         return gpt_get_summary_description_of_action(
-            outcome, call_handler=self.gpt_handler, max_tokens=256
+            game=self.game,
+            statement=outcome,
+            call_handler=self.gpt_handler,
+            max_tokens=256
         )
 
     def extract_keywords(self, text, actions=False):
@@ -1052,8 +1056,7 @@ class GptParser(Parser):
         Extracts keywords from the provided text, identifying characters, objects, and optionally actions.
 
         This method processes the input text using natural language processing to identify and categorize keywords, such
-        as characters, objects, and actions, while filtering out common stopwords. It returns a dictionary containing sets of
-        identified characters, objects, actions, and miscellaneous dependencies based on the text analysis.
+        as characters, objects, actions, and miscellaneous dependencies based on the text analysis.
 
         Args:
             text (str): The input text from which to extract keywords.
@@ -1064,83 +1067,208 @@ class GptParser(Parser):
                   each containing a list of identified keywords.
         """
 
-        # Check if the input text is empty; if so, return None.
-        if not text:
-            return None
-
-        # Define a set of custom stopwords to filter out common, non-informative words, including basic verbs.
-        custom_stopwords = {
-            "a",
-            "an",
-            "and",
-            "he",
-            "it",
-            "i",
-            "you",
-            "she",
-            "they",
-            "we",
-            "us",
-            "'s",
-            "this",
-            "that",
-            "these",
-            "those",
-            "them",
-            "their",
-            "my",
-            "your",
-            "our",
-            "the",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "being",
-            "been",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "say",
-            "says",
-            "said",
-            "go",
-            "goes",
-            "went",
-            "make",
-            "makes",
-            "made",
-            "know",
-            "knows",
-            "knew",
-            "think",
-            "thinks",
-            "thought",
-            "take",
-            "takes",
-            "took",
-            "see",
-            "sees",
-            "saw",
-            "come",
-            "comes",
-            "came",
-            "want",
-            "wants",
-            "wanted",
-            "like",
-            "likes",
-            "liked",
-        }
-
         # Import necessary packages for lemmatization and singularization.
         from nltk.stem import WordNetLemmatizer
         from nltk.corpus import wordnet
         from inflect import engine
+        import string
+
+        # Check if the input text is empty; if so, return None.
+        if not text:
+            return None
+
+        # Define punctuation to remove, excluding hyphen
+        punctuation_to_remove = set(string.punctuation)
+
+        # Define a set of custom stopwords to filter out common, non-informative words
+        custom_stopwords = punctuation_to_remove.union(
+            {
+                "a",
+                "an",
+                "and",
+                "he",
+                "it",
+                "i",
+                "me",
+                "you",
+                "she",
+                "they",
+                "we",
+                "us",
+                "new",
+                "to",
+                "in",
+                "on",
+                "at",
+                "from",
+                "by",
+                "with",
+                "as",
+                "but",
+                "if",
+                "about",
+                "above",
+                "after",
+                "against",
+                "along",
+                "among",
+                "around",
+                "before",
+                "behind",
+                "below",
+                "beneath",
+                "beside",
+                "between",
+                "beyond",
+                "during",
+                "except",
+                "for",
+                "inside",
+                "into",
+                "near",
+                "outside",
+                "over",
+                "through",
+                "toward",
+                "under",
+                "until",
+                "upon",
+                "within",
+                "without",
+                "'s",
+                "this",
+                "that",
+                "these",
+                "those",
+                "them",
+                "their",
+                "my",
+                "your",
+                "our",
+                "the",
+                "is",
+                "are",
+                "was",
+                "were",
+                "be",
+                "being",
+                "been",
+                "have",
+                "has",
+                "had",
+                "do",
+                "does",
+                "did",
+                "say",
+                "says",
+                "said",
+                "go",
+                "goes",
+                "went",
+                "make",
+                "makes",
+                "made",
+                "know",
+                "knows",
+                "knew",
+                "think",
+                "thinks",
+                "thought",
+                "take",
+                "takes",
+                "took",
+                "see",
+                "sees",
+                "saw",
+                "come",
+                "comes",
+                "came",
+                "want",
+                "wants",
+                "wanted",
+                "like",
+                "likes",
+                "liked",
+                "what",
+                "why",
+                "where",
+                "when",
+                "how",
+                "or",
+                "because",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "0",
+                "each",
+                "every",
+                "some",
+                "any",
+                "all",
+                "no",
+                "not",
+                "more",
+                "most",
+                "such",
+                "than",
+                "then",
+                "now",
+                "here",
+                "there",
+                "who",
+                "whom",
+                "whose",
+                "which",
+                "while",
+                "although",
+                "since",
+                "also",
+                "either",
+                "neither",
+                "both",
+                "few",
+                "less",
+                "many",
+                "much",
+                "another",
+                "same",
+                "own",
+                "try",
+                "get",
+                "put",
+                "just",
+                "only",
+                "too",
+                "very",
+                "other",
+                "zero",
+                "one",
+                "two",
+                "three",
+                "four",
+                "five",
+                "six",
+                "seven",
+                "eight",
+                "nine",
+                "ten",
+                "twenty",
+                "thirty",
+                "forty",
+                "fifty",
+                "sixty",
+                "seventy",
+                "eighty",
+                "ninety",
+                "hundred",
+            }
+        )
 
         # Initialize the lemmatizer and inflect engine.
         lemmatizer = WordNetLemmatizer()
@@ -1149,6 +1277,9 @@ class GptParser(Parser):
         # Function to standardize words by converting to lowercase, lemmatizing, and singularizing.
         def standardize_word(word):
             word = word.lower()
+            # Preserve hyphenated words
+            if '-' in word:
+                return word
             # Try lemmatizing with different parts of speech
             for pos in [wordnet.VERB, wordnet.NOUN, wordnet.ADJ, wordnet.ADV]:
                 lemmatized_word = lemmatizer.lemmatize(word, pos)
@@ -1157,7 +1288,7 @@ class GptParser(Parser):
                     if pos == wordnet.NOUN:
                         word = inflect_engine.singular_noun(word) or word
                         break
-                return word
+            return word
 
         # Process the input text using the natural language processing model.
         doc = self.nlp(text)
@@ -1173,30 +1304,29 @@ class GptParser(Parser):
 
             # Check if the word is a proper noun (PROPN).
             if w.pos_ in ["PROPN"]:
-                # If the proper noun has compound words, handle the entire compound noun.
-                compound_noun = " ".join(
-                    [
-                        child.text
-                        for child in w.subtree
-                        if child.text.lower() not in custom_stopwords
-                    ]
-                ).lower()
+                # Handle compound nouns while preserving hyphenated words
+                compound_parts = []
+                for child in w.subtree:
+                    if child.text.lower() not in custom_stopwords:
+                        if '-' in child.text:
+                            compound_parts.append(child.text.lower())
+                        else:
+                            compound_parts.append(standardize_word(child.text))
+
+                compound_noun = " ".join(compound_parts)
+
                 exists, name = self.check_if_character_exists(compound_noun)
                 if exists:
-                    # If the character exists, add it to the characters set.
                     keys["characters"].add(name.lower())
                 else:
-                    # If not, add the compound noun to miscellaneous dependencies.
                     keys["misc_deps"].add(standardize_word(compound_noun))
 
-                # Process each word in the compound noun separately.
-                for part in compound_noun.split():
+                # Process each word in the compound noun separately
+                for part in compound_parts:
                     exists, name = self.check_if_character_exists(part)
                     if exists:
-                        # If the character exists, add it to the characters set.
                         keys["characters"].add(name.lower())
                     else:
-                        # If not, add the word to miscellaneous dependencies.
                         keys["misc_deps"].add(standardize_word(part))
                 continue
 
@@ -1204,20 +1334,16 @@ class GptParser(Parser):
             if "subj" in w.dep_:
                 exists, name = self.check_if_character_exists(w.text.lower())
                 if exists:
-                    # If the character exists, add it to the characters set.
                     keys["characters"].add(name.lower())
                 else:
-                    # If not, add the word to miscellaneous dependencies.
                     keys["misc_deps"].add(standardize_word(w.text))
 
             # Check if the word is an object in the dependency parse.
             if "obj" in w.dep_:
                 exists, name = self.check_if_character_exists(w.text.lower())
                 if exists:
-                    # If the character exists, add it to the characters set.
                     keys["characters"].add(name.lower())
                 else:
-                    # If not, add the word to the objects set.
                     keys["objects"].add(standardize_word(w.text))
 
             if actions:
@@ -1231,19 +1357,19 @@ class GptParser(Parser):
             if ent.label_ in ["PERSON", "ORG", "GPE"]:
                 exists, name = self.check_if_character_exists(ent.text.lower())
                 if exists:
-                    # If the character exists, add it to the characters set.
                     keys["characters"].add(name.lower())
                 else:
-                    cleaned_entity = " ".join(
-                        [
-                            standardize_word(w.text)
-                            for word in ent.text.split()
-                            if word.lower() not in custom_stopwords
-                        ]
-                    ).lower()
+                    entity_parts = []
+                    for w in ent:
+                        if w.text.lower() not in custom_stopwords:
+                            if '-' in w.text:
+                                entity_parts.append(w.text.lower())
+                            else:
+                                entity_parts.append(w.text.lower())
+                    cleaned_entity = " ".join(entity_parts)
                     keys["other_named_entities"].add(cleaned_entity)
 
-        # Remove duplicates between 'misc_deps' and 'other_named_entities'
+        # Remove duplicates between sets
         keys["other_named_entities"] = keys["other_named_entities"] - keys["misc_deps"]
 
         # Remove duplicates between 'characters' and 'other_named_entities'
@@ -1294,6 +1420,7 @@ class GptParser(Parser):
             # Call the function to get the importance of the action using the GPT model.
             importance_of_action = gpt_get_action_importance(
                 action_statement,
+                game=self.game,
                 call_handler=self.gpt_handler,
                 max_tokens=10,
                 top_p=0.25,
@@ -1467,7 +1594,11 @@ class GptParser(Parser):
 
             # Calculate the importance of the action based on the GPT response.
             importance_of_action = gpt_get_action_importance(
-                response, call_handler=self.gpt_handler, max_tokens=10, top_p=0.25
+                response,
+                game=self.game,
+                call_handler=self.gpt_handler,
+                max_tokens=10,
+                top_p=0.25,
             )
 
             # Extract keywords from the GPT response for further context.
@@ -1602,13 +1733,15 @@ class GptParser2(GptParser):
 
         # Call the gpt_pick_an_option function to determine the best matching command for the user's input.
         # Pass the constructed instructions, the command descriptions, the user's command, and the GPT handler.
-        return gpt_pick_an_option(
-            instructions,
-            self.command_descriptions,  # The dictionary of command descriptions to match against.
-            command,  # The user's input command to analyze.
-            self.gpt_handler,  # The handler for interacting with the GPT model.
+        result = gpt_pick_an_option(
+            game=self.game,
+            instructions=instructions,
+            options=self.command_descriptions,  # The dictionary of command descriptions to match against.
+            input_str=command,  # The user's input command to analyze.
+            call_handler=self.gpt_handler,  # The handler for interacting with the GPT model.
             max_tokens=10,  # Limit the number of tokens in the response.
         )
+        return result[0] if len(result) > 0 else None
 
 
 class GptParser3(GptParser2):
@@ -1647,6 +1780,7 @@ class GptParser3(GptParser2):
         hint: str = None,
         split_words=None,
         position=None,
+        allow_multiple=False,
     ) -> Character:
         """
         Attempts to match a character's name from the command input.
@@ -1661,7 +1795,7 @@ class GptParser3(GptParser2):
             hint (str, optional): A hint about the role of the character being searched for. Defaults to None.
             split_words (optional): Not used in this implementation. Defaults to None.
             position (optional): Not used in this implementation. Defaults to None.
-
+            allow_multiple (bool, optional): Whether to allow multiple characters to be matched. Defaults to False.
         Returns:
             Character: The matched character object based on the command input, or None if no match is found.
         """
@@ -1720,14 +1854,21 @@ class GptParser3(GptParser2):
 
         # Call the gpt_pick_an_option function to determine the best matching character based on the instructions and
         # command.
-        return gpt_pick_an_option(
-            instructions,
-            character_descriptions,  # Pass the dictionary of character descriptions for matching.
-            command,  # The command input by the player to analyze.
+        result = gpt_pick_an_option(
+            game=self.game,
+            instructions=instructions,
+            options=character_descriptions,  # Pass the dictionary of character descriptions for matching.
+            input_str=command,  # The command input by the player to analyze.
             call_handler=self.gpt_handler,  # The handler for interacting with the GPT model.
             max_tokens=10,  # Limit the number of tokens in the response.
+            allow_multiple=allow_multiple,
         )
-
+        
+        if allow_multiple:
+            return result
+        else:
+            return result[0] if len(result) > 0 else None
+    
     def match_item(
         self, command: str, item_dict: dict[str, "Item"], hint: str = None
     ) -> "Item":
@@ -1789,14 +1930,16 @@ class GptParser3(GptParser2):
             item_descriptions[description] = item
 
         # Call the gpt_pick_an_option function to determine the best matching item based on the instructions and command.
-        return gpt_pick_an_option(
-            instructions,
-            item_descriptions,  # Pass the dictionary of item descriptions for matching.
-            command,  # The command input by the player to analyze.
+        result = gpt_pick_an_option(
+            game=self.game,
+            instructions=instructions,
+            options=item_descriptions,  # Pass the dictionary of item descriptions for matching.
+            input_str=command,  # The command input by the player to analyze.
             call_handler=self.gpt_handler,  # The handler for interacting with the GPT model.
             max_tokens=10,  # Limit the number of tokens in the response.
         )
-
+        return result[0] if len(result) > 0 else None
+    
     def get_direction(self, command: str, location: "Location" = None) -> str:
         """
         Determines the intended direction of movement based on the player's command.
@@ -1860,13 +2003,15 @@ class GptParser3(GptParser2):
 
         # Call the gpt_pick_an_option function to determine the best matching direction based on the instructions and
         # command.
-        return gpt_pick_an_option(
-            instructions,
-            directions,  # Pass the dictionary of possible directions for matching.
-            command,  # The command input by the player to analyze.
+        result = gpt_pick_an_option(
+            game=self.game,
+            instructions=instructions,
+            options=directions,  # Pass the dictionary of possible directions for matching.
+            input_str=command,  # The command input by the player to analyze.
             call_handler=self.gpt_handler,  # The handler for interacting with the GPT model.
             max_tokens=10,  # Limit the number of tokens in the response.
         )
+        return result[0] if len(result) > 0 else None
 
 
 # class GptParser3(GptParser2):

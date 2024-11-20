@@ -1075,7 +1075,7 @@ class SurvivorGame(Game):
             overwrite=False,
         )
         # print("GAME LOGGER:", game_logger)
-        
+
         gpt_call_logger = logger.CustomLogger(
             name="gpt_call_logger",
             experiment_name=game_logger.get_experiment_name(),
@@ -1084,10 +1084,19 @@ class SurvivorGame(Game):
             overwrite=True,
         )
         # print("GPT CALL LOGGER:", gpt_call_logger)
-        
+
+        # dialogue_logger = logger.CustomLogger(
+        #     name="dialogue_logger",
+        #     experiment_name=game_logger.get_experiment_name(),
+        #     simulation_id=game_logger.get_simulation_id(),
+        #     logfile_prefix="dialogue",
+        #     overwrite=True,
+        # )
+        # # print("DIALOGUE LOGGER:", dialogue_logger)
+
         self.logger = game_logger.get_logger()
         self.gpt_call_logger = gpt_call_logger.get_logger()
-        
+        # self.dialogue_logger = dialogue_logger.get_logger()
         self.experiment_name = experiment_name  # Store the experiment name
         self.experiment_id = game_logger.get_simulation_id()  # Store the simulation ID
 
@@ -1483,7 +1492,7 @@ class SurvivorGame(Game):
         extras["type"] = "Calls"
 
         # Create a message containing the current count of GPT calls
-        message = f"Current GPT calls count: {GptCallHandler.get_calls_count()}"
+        message = f"Current GPT calls count: {GptCallHandler.get_gpt_calls_count()}"
 
         # Log the message at the debug level, including the extras for context
         self.logger.debug(msg=message, extra=extras)
@@ -1865,3 +1874,39 @@ class SurvivorGame(Game):
 
             # Write the character goal scores to the JSON file
             json.dump(output, f, indent=4)
+
+    def save_dialogue_data(self, text: str) -> None:
+        """
+        Saves the input dialogue data to a JSON file.
+        This method organizes the data into specific directories based on the experiment name and ID, ensuring that all
+        relevant information is stored for later analysis.
+
+        Args:
+            text (str): The text to save to the dialogue log.
+
+        Returns:
+            None
+        """
+
+        # Get the output path for saving log files
+        output_path = get_output_logs_path()
+
+        # Create a directory path for the current experiment logs, including experiment name and ID
+        experiment_dir = f"logs/{self.experiment_name}-{self.experiment_id}/"
+
+        # Construct the file path for saving dialogue data in JSON format
+        fp = os.path.join(
+            output_path,
+            experiment_dir,
+            f"dialogue_log_{self.experiment_name}-{self.experiment_id}.json",
+        )
+
+        # Create necessary directories for the file path
+        create_dirs(fp)
+
+        # Save the dialogue data to the specified JSON file
+        with open(fp, mode="a") as f:  # Change mode to "a" for appending
+            if os.path.getsize(fp) > 0:  # Check if the file is not empty
+                f.write("\n")  # Add a newline before writing new data
+            json.dump(text, f, indent=4)  # Write the dialogue text with indentation for readability
+

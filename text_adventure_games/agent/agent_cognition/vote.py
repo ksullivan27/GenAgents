@@ -706,7 +706,9 @@ class VotingSession:
 
         # Generate a vote by calling the GPT model with the provided system and user prompts
         # The system prompt includes context, while the user prompt contains recent memories and valid voting options
-        vote = self.gpt_handler.generate(system_prompt, user_prompt, character=voter, game=self.game)
+        vote = self.gpt_handler.generate(
+            system=system_prompt, user=user_prompt, character=voter, game=self.game
+        )
 
         # Check if the vote returned is a tuple, indicating a potential error
         if isinstance(vote, tuple):

@@ -138,13 +138,15 @@ def get_logger_extras(game, character=None, include_gpt_call_id=False, stack_lev
 
     # Get the filename of the module that called the module that called the module that made this function call
     prev_module_name = inspect.stack()[stack_level + 1].filename
+    # Extract the last part of the path
+    prev_module_name = os.path.basename(prev_module_name)
     # Remove the .py extension
     prev_module_name = os.path.splitext(prev_module_name)[0]
     # Capitalize name
     prev_module_name = prev_module_name.title()
 
     if include_gpt_call_id:
-        gpt_call_id = GptCallHandler.get_calls_count()
+        gpt_call_id = GptCallHandler.get_gpt_calls_count()
     else:
         gpt_call_id = "N/A"
 
@@ -551,7 +553,7 @@ def enumerate_dict_options(options, names_only=False, inverted=False, enumerate_
                 else:
                     choices_str += "{n}\n".format(n=name)
         # Return the formatted choices string and None since no keys are needed.
-        return choices_str, None
+        return choices_str.rstrip('\n'), None
     else:
         # If names_only is False, create a numbered list that includes both values and keys.
         for i, (k, v) in enumerate(options.items()):
@@ -560,7 +562,7 @@ def enumerate_dict_options(options, names_only=False, inverted=False, enumerate_
             else:
                 choices_str += "{v}: {k}\n".format(v=v, k=k)
         # Return the formatted choices string along with the list of option keys.
-        return choices_str, options_list
+        return choices_str.rstrip('\n'), options_list
 
 
 def combine_dicts_helper(existing, new):

@@ -59,7 +59,7 @@ def get_new_character_from_gpt(description):
     """
 
     # client = general.set_up_openai_client(org="Penn")
-    GPT_HANDLER.update_params(max_tokens=500, temperature=1.25)
+    GPT_HANDLER.update_params(max_tokens=1000, temperature=1.25)
 
     system_prompt = (
         """You are a character generator. You should fill in the following character information based on a short """
@@ -77,7 +77,11 @@ def get_new_character_from_gpt(description):
     )
 
     user_prompt = f"Create a character who fits this description: {description}"
-    response = GPT_HANDLER.generate(system_prompt, user_prompt, response_format=prompt_classes.Character)
+    response = GPT_HANDLER.generate(
+        system=system_prompt,
+        user=user_prompt,
+        response_format=prompt_classes.Character,
+    )
     GPT_HANDLER.reset_defaults()
 
     print("RESPONSE:", response)

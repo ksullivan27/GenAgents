@@ -31,7 +31,7 @@ Description: This is the universal information that agents will have access to a
 world_info = (
     "You are competing in a game show where you can be voted out by your fellow contestants at the end of a round. "
     "There are currently {contestant_count} more contestants, including you. The others are: {contestant_names_locs}. "
-    "You may only talk to characters in your same location. If they are not here, then you need to move first to where "
+    "You may only talk to characters in your same location. If they are not here, then you need to move first to "
     "their location. When {n_finalists} contestants remain, a jury of the contestants you have voted off will vote for "
     "a winner! This means there are {rounds_until_finals} rounds until the finals. You have {turns_left_this_round} "
     "more turns this round before you will vote. There could be an idol hiding somewhere in the game that grants you "
@@ -58,8 +58,7 @@ boardroom_world_info = (
     "You are seated at a boardroom meeting for {meeting_name}, discussing {topic}. Also present are: "
     "{characters}. Having carefully read through the provided documents, you prepare talking points, "
     "arguments, and counterarguments for the meeting. Once the meeting starts, you will be given a chance to speak. "
-    "Your goal is to present your case and sway the other board members to your side. There are {minutes_left} "
-    "minutes remaining in the meeting."
+    "Your goal is to present your case and sway the other board members to your side."
 )
 
 discovery_basic_goal = (

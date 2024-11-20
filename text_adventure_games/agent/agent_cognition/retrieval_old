@@ -22,8 +22,6 @@ from typing import (
     Union,
     List,
     Tuple,
-    Literal,
-    Optional,
 )  # Allows conditional imports for type hints
 import numpy as np  # Imports NumPy for numerical operations
 from sklearn.metrics.pairwise import (
@@ -45,10 +43,6 @@ if (
     )
 
 if circular_import_prints:
-    print(f"\t{__name__} calling Type Checking imports for MemoryStream")
-from text_adventure_games.agent.memory_stream import MemoryStream
-
-if circular_import_prints:
     print(f"\t{__name__} calling Type Checking imports for MemoryType")
 from text_adventure_games.agent.memory_stream import MemoryType
 
@@ -66,7 +60,7 @@ from text_adventure_games.utils.consts import get_models_config
 # Importing GptCallHandler to interface with OpenAI client
 if circular_import_prints:
     print(f"\t{__name__} calling imports for GptHelpers")
-from ...gpt.gpt_helpers import GptCallHandler, limit_context_length
+from ...gpt.gpt_helpers import GptCallHandler
 
 
 # initially focus on the people that are around the current character
@@ -127,29 +121,18 @@ class Retrieve:
             dict[
                 str,
                 Union[
-                    dict[
-                        str,
-                        Union[
-                            Tuple[Tuple[float, int], np.ndarray], dict[str, np.ndarray]
-                        ],
-                    ],
-                    dict[str, dict[str, np.ndarray]],
+                    dict[str, Tuple[int, np.ndarray]], dict[str, dict[str, np.ndarray]]
                 ],
             ],
             dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
             list[str],
             str,
         ] = None,
-        sort_nodes: Literal[
-            "chronological", "reverse chronological", "importance", "reverse importance"
-        ] = "importance",
+        sort_nodes: Literal["chronological", "reverse chronological", "importance", "reverse importance"] = "importance",
         n: int = -1,
         threshold: float = 0.45,
         percentile: float = 0.75,
-        memory_lookback: int | None = None,
-        round: int | None = None,
         method: str = "mean",
-        include_descriptions: bool = True,
         include_idx: bool = False,
         include_scores: bool = False,
         minmax_scale: bool = True,
@@ -166,27 +149,19 @@ class Retrieve:
     ) -> list[str]:
         """
         Retrieve relevant memory nodes for a given character based on a query.
-        This function gathers keywords, retrieves all memories associated with them, ranks these memory nodes, and
-        returns a list of descriptions or indexed descriptions.
+        This function gathers keywords, retrieves all memories associated with them, ranks these memory nodes, and returns a
+        list of descriptions or indexed descriptions.
 
-        Using character goals, current perceptions, and possibly additional inputs, this method parses these for
-        keywords, retrieves a list of memory nodes based on the keywords, calculates the retrieval score for each, and
-        returns a ranked list of memories.
-        
-        Note: Either descriptions or indices are required in the output. If descriptions are not being returned, max
-        tokens and prepend are ignored. Max tokens is intended to be used when you want to limit memories displayed in a
-        specific format. If you want node IDs without descriptions (for instance to get the MemoryType objects from
-        them), these will be returned as integers.
+        Using character goals, current perceptions, and possibly additional inputs, this method parses these for keywords,
+        retrieves a list of memory nodes based on the keywords, calculates the retrieval score for each, and returns a
+        ranked list of memories.
 
         Args:
             game (Game): The game context in which the character exists.
             character (Character): The character whose memory is being queried.
-            query (Union[dict[str, Union[dict[str, Union[Tuple[Tuple[float, int], np.ndarray],
-            dict[str, np.ndarray]]], dict[str, dict[str, np.ndarray]]]],
-            dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
-            list[str],
-            str]): An optional search query to determine relevance. If not provided, default queries are used. Defaults
-            to None.
+            dict[str, dict[str, np.ndarray]]]], dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
+            list[str], str]): An optional search query to determine relevance. If not provided, default queries are
+            used. Defaults to None.
             sort_nodes (Literal["chronological", "reverse chronological", "importance", "reverse importance"],
                           optional): Whether to sort the nodes by recency, reverse chronological, importance, or
                           reverse importance. Defaults to "importance".
@@ -194,14 +169,7 @@ class Retrieve:
             threshold (float, optional): The cosine similarity threshold to consider a keyword as a match (default is
                                          0.9).
             percentile (float, optional): The percentile threshold for filtering memory scores. Defaults to 0.75.
-            memory_lookback (int | None, optional): The number of memories to look back across. Defaults to None, which
-                                                    utilizes the character's memory lookback value. Setting this
-                                                    value to -1 will look back across all memories.
-            round (int | None, optional): If specified, will only retrieve memories that occurred during or after the
-                                          specified round.
             method (str, optional): The method to use for aggregation ('mean' or 'median'). Defaults to 'mean'.
-            include_descriptions (bool, optional): If True, includes the descriptions of the memory nodes in the output.
-                                                  Defaults to True.
             include_idx (bool, optional): If True, includes the index of each memory node in the output. Defaults to
                                           False.
             include_scores (bool, optional): If True, includes the scores in the output. Defaults to False.
@@ -217,71 +185,21 @@ class Retrieve:
                           nodes are found.
         """
 
-        if not (include_descriptions or include_idx):
-            raise ValueError("Must include either descriptions or indices in the output")
-
-        if not include_descriptions:
-            max_tokens = None
-            prepend = ""
-
-        # print(f"\n\nRetrieve.retrieve() called with query: {query}")
-
-        # print("-\tQuery is a dictionary:", isinstance(query, dict))
-        # print("-\t'embeddings' in query:", "embeddings" in query)
-        # print("-\t'embeddings' is a dictionary:", isinstance(query["embeddings"], dict))
-        # print(
-        #     "-\tAll values of 'embeddings' are tuples:",
-        #     all(isinstance(value, tuple) for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tAll values of 'embeddings' have length 2:",
-        #     all(len(value) == 2 for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' are tuples:",
-        #     all(isinstance(value[0], tuple) for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' have length 2:",
-        #     all(len(value[0]) == 2 for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' have float as first element:",
-        #     all(
-        #         isinstance(value[0][0], float) for value in query["embeddings"].values()
-        #     ),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' have int as second element:",
-        #     all(isinstance(value[0][1], int) for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tSecond element of all values of 'embeddings' are np.ndarrays:",
-        #     all(
-        #         isinstance(value[1], np.ndarray)
-        #         for value in query["embeddings"].values()
-        #     ),
-        # )
-
         # Check if the query is weighted; it must correctly include weights for each embedding
         if weighted and not (
             isinstance(query, dict)
-            and "embeddings" in query
-            and isinstance(query["embeddings"], dict)
-            and all(
-                isinstance(value, tuple)
-                and len(value) == 2
-                and isinstance(value[0], tuple)
-                and len(value[0]) == 2
-                and isinstance(value[0][0], float)
-                and isinstance(value[0][1], int)
-                and isinstance(value[1], np.ndarray)
-                for value in query["embeddings"].values()
-            )
+            and not hasattr(query, "embeddings")
+            and isinstance(query["embeddings"], tuple)
+            and (
+                query["embeddings"][0] == tuple
+                and isinstance(query["embeddings"][0][0], float)
+                and isinstance(query["embeddings"][0][1], int)
+                or query["embeddings"][0] == int
+                )
+            and query["embeddings"][-1] == np.ndarray
         ):
             raise ValueError(
-                f"Query must be a dictionary with 'embeddings' mapping to individual query strings that map to tuples, "
-                f"where the first index is a tuple of (float, int) and the second index is an np.ndarray. Instead, got {query}"
+                "Query must be a dictionary with embeddings mapping to tuples of int (weights) and np.ndarray (embeddings)"
             )
 
         if circular_import_prints:
@@ -290,33 +208,21 @@ class Retrieve:
         # Initialize the GPT handler if it hasn't been set up yet
         cls.initialize_gpt_handler()
 
-        if memory_lookback != -1:
+        # Gather keywords for searching relevant memory nodes based on the game and character context.
+        # This gets the keywords associated with recent memories and goals, along with the optional query.
+        keywords_to_embeddings_dict = Retrieve._gather_keywords_for_search(
+            game=game,
+            character=character,
+            query=query,
+        )
 
-            # Gather keywords for searching relevant memory nodes based on the game and character context.
-            # This gets the keywords associated with recent memories and goals, along with the optional query.
-            keywords_to_embeddings_dict = Retrieve._gather_keywords_for_search(
-                game=game,
-                character=character,
-                query=query,
-                memory_lookback=memory_lookback,
-            )
-
-            # Retrieve memory node IDs that are relevant to the gathered search keys
-            memory_node_ids = Retrieve._get_relevant_memory_ids(
-                search_keys=keywords_to_embeddings_dict,
-                character=character,
-                memory_types=memory_types,
-                threshold=threshold,
-            )
-
-        else:
-            memory_node_ids = character.memory.get_observations_by_type(
-                obs_type=memory_types
-            )
-        
-        # If a round is specified, only retrieve memories from that round
-        if round:
-            memory_node_ids = [id for id in memory_node_ids if character.memory.observations[id].node_round >= round]
+        # Retrieve memory node IDs that are relevant to the gathered search keys
+        memory_node_ids = Retrieve._get_relevant_memory_ids(
+            search_keys=keywords_to_embeddings_dict,
+            character=character,
+            memory_types=memory_types,
+            threshold=threshold,
+        )
 
         # If no relevant memory node IDs are found, return an empty list
         if len(memory_node_ids) == 0:
@@ -334,9 +240,7 @@ class Retrieve:
         )
 
         ranked_memory_scores = cls.format_node_scores(
-            character=character,
             node_scores=ranked_memory_ids,
-            include_descriptions=include_descriptions,
             include_idx=include_idx,
             prepend=prepend,
         )
@@ -361,9 +265,7 @@ class Retrieve:
     @classmethod
     def format_node_scores(
         cls,
-        character: "Character",
         node_scores: list[tuple],
-        include_descriptions: bool = True,
         include_idx: bool = False,
         prepend: str = "",
     ) -> list[tuple]:
@@ -375,10 +277,8 @@ class Retrieve:
         include the index if specified.
 
         Args:
-            character (Character): The character whose memory is being queried.
+            cls: The class reference.
             node_scores (list[tuple]): A list of tuples containing memory scores and their corresponding node indices.
-            include_descriptions (bool): A flag indicating whether to include the descriptions of the memory nodes in
-                                          the output. Defaults to True.
             include_idx (bool): A flag indicating whether to include the index in the output. Defaults to False.
             prepend (str): A string to prepend to each memory description. Defaults to "".
 
@@ -389,27 +289,18 @@ class Retrieve:
         if not include_idx:
             # Return a list of memory node descriptions as strings without indices
             return [
-                (
-                    t[0],
-                    f"{prepend}{character.memory.observations[t[1]].node_description}",
-                )
+                (t[0], f"{prepend}{character.memory.observations[t[1]].node_description}\n")
                 for t in node_scores
             ]
         else:
-            if include_descriptions:
-                # Return a list of indexed memory node descriptions
-                return [
-                    (
-                        t[0],
-                        f"{prepend}{t[1]}. {character.memory.observations[t[1]].node_description}",
-                    )
-                    for t in node_scores
-                ]
-            else:
-                # Return a list of memory node indices
-                return [
-                    (t[0], int(t[1])) for t in node_scores
-                ]
+            # Return a list of indexed memory node descriptions
+            return [
+                (
+                    t[0],
+                    f"{t[1]}. {prepend}{character.memory.observations[t[1]].node_description}",
+                )
+                for t in node_scores
+            ]
 
     @classmethod
     def trim_memory_scores(
@@ -423,7 +314,7 @@ class Retrieve:
         Trims and sorts memory scores based on specified criteria.
 
         This method removes the lowest scoring memories to fit within a maximum token limit,
-        sorts the remaining memories based on the specified sorting method, and limits the
+        sorts the remaining memories based on the specified sorting method, and limits the 
         number of returned memory nodes if specified.
 
         Args:
@@ -469,28 +360,18 @@ class Retrieve:
             ]
 
         # If sorting is enabled, sort the memory scores based on the specified method
-        if sort_nodes == "importance":  # Ascending importance
+        if sort_nodes == "importance":  # Ascending
             memory_scores = sorted(memory_scores, key=lambda x: x[0], reverse=False)
-            # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
-            # print("MEMORIES (RETRIEVE)", type(memory_scores), len(memory_scores), memory_scores)
-            if n > 0:
-                memory_scores = memory_scores[-n:]
-                # print("LIMITED MEMORIES (RETRIEVE)", type(memory_scores), len(memory_scores), memory_scores)
-        elif sort_nodes == "reverse importance":  # Descending importance
+        elif sort_nodes == "reverse importance":  # Descending
             memory_scores = sorted(memory_scores, key=lambda x: x[0], reverse=True)
-            # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
-            if n > 0:
-                memory_scores = memory_scores[:n]
-        elif sort_nodes == "chronological":  # Ascending chronologically
-            # No sorting needed for chronological (currently in chronological order)
-            # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
-            if n > 0:
-                memory_scores = memory_scores[-n:]
-        elif sort_nodes == "reverse chronological":  # Descending chronologically
+        elif sort_nodes == "chronological":  # Ascending
+            pass  # No sorting needed for chronological
+        elif sort_nodes == "reverse chronological":  # Descending
             memory_scores = list(reversed(memory_scores))
-            # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
-            if n > 0:
-                memory_scores = memory_scores[:n]
+
+        # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
+        if n > 0:
+            memory_scores = memory_scores[-n:]
 
         return memory_scores
 
@@ -503,61 +384,48 @@ class Retrieve:
             dict[
                 str,
                 Union[
-                    dict[
-                        str,
-                        Union[
-                            Tuple[Tuple[int], np.ndarray],
-                            Tuple[Tuple[float, int], np.ndarray],
-                            dict[str, np.ndarray],
-                        ],
-                    ],
-                    dict[str, dict[str, np.ndarray]],
+                    dict[str, Tuple[int, np.ndarray]], dict[str, dict[str, np.ndarray]]
                 ],
             ],
-            dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
+            dict[
+                str,
+                Union[
+                    dict[str, dict[str, np.ndarray]], dict[str, dict[str, np.ndarray]]
+                ],
+            ],
             list[str],
             str,
         ],
         percentile: float = 0.75,
         method: str = "mean",
-        standardize: bool = True,
         minmax_scale: bool = True,
         weighted: bool = False,
-        separate_scores: bool = False,
-    ) -> List[tuple[float, int]]:
+    ) -> List[tuple]:
         """
         Rank memory nodes based on recency, importance, and relevance to a given query.
-        This function calculates scores for each node and returns them as tuples containing the total score and node ID.
+        This function calculates scores for each node and returns them sorted by their total score (ascending). It's a
+        wrapper for the component scores that sum to define total node score.
 
         Args:
             character (Character): The character whose memory is being evaluated.
             node_ids (List[int]): A list of memory node IDs to be ranked.
-            query (Union[dict[str, Union[dict[str, Tuple[Union[int, Tuple[float, int]]], np.ndarray]],
-            dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]], list[str], str]): An optional
-            search query to determine relevance.
+            dict[str, dict[str, np.ndarray]]]], dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
+            list[str], str]): An optional search query to determine relevance. If not provided, default queries are
+            used. Defaults to None.
             percentile (float): The percentile threshold to filter relevance scores (default is 0.75).
             method (str): The method to use for aggregation of relevance scores ('mean' or 'median', default is 'mean').
-            standardize (bool): Whether to standardize the scores. Defaults to True.
             minmax_scale (bool): Whether to normalize the scores between 0 and 1. Defaults to True.
             weighted (bool): Whether to use weighted retrieval. Defaults to False.
-            separate_scores (bool): Whether to return the recency, importance, and relevance scores separately.
-                                    Defaults to False.
 
         Returns:
-            List[tuple[float, int]]: A list of tuples containing total scores and their corresponding node IDs.
+            List[tuple]: A sorted list of tuples containing node IDs and their corresponding scores.
         """
-
-        # print("WEIGHTED", weighted)
-        # print("SEPARATE SCORES", separate_scores)
-        # print("STANDARDIZE", standardize)
-        # print("QUERY", query)
 
         # Calculate the recency score for each memory node based on the character's memory
         recency = Retrieve._calculate_node_recency(
             character=character,
             memory_ids=node_ids,
             minmax_scale=minmax_scale,
-            standardize=standardize,
         )
 
         # Calculate the importance score for each memory node based on the character's memory
@@ -565,7 +433,6 @@ class Retrieve:
             character=character,
             memory_ids=node_ids,
             minmax_scale=minmax_scale,
-            standardize=standardize,
         )
 
         # Calculate the relevance score for each memory node in relation to the provided query
@@ -575,50 +442,29 @@ class Retrieve:
             query=query,
             percentile=percentile,
             method=method,
-            standardize=standardize,
             minmax_scale=minmax_scale,
             weighted=weighted,
         )
 
         # Scale the raw scores by the character's memory weights for recency, importance, and relevance
-        recency = MemoryStream.recency_alpha * recency
-        importance = MemoryStream.importance_alpha * importance
-        relevance = MemoryStream.relevance_alpha * relevance
+        # Currently, all weights are set to 1
+        recency = character.memory.recency_alpha * recency
+        importance = character.memory.importance_alpha * importance
+        relevance = character.memory.relevance_alpha * relevance
 
-        # If separate scores are requested, return the recency, importance, and relevance scores separately
-        if separate_scores:
-            return {
-                "recency": recency,
-                "importance": importance,
-                "relevance": relevance,
-            }
-
-        # Check if relevance is a 2D numpy array
-        if isinstance(relevance, np.ndarray) and relevance.ndim == 2 and all(
-            # Ensure each row in the relevance array is a 1D numpy array
-            isinstance(row, np.ndarray) and (row.ndim == 1 or row.ndim == (1,))
-            for row in relevance
-        ):
-            # Sum the relevance scores across the rows to get a single score for each memory node
-            relevance = np.sum(relevance, axis=1)
-
-        # print(f"Recency: {type(recency)}, {recency}")
-        # print(f"Importance: {type(importance)}, {importance}")
-        # print(f"Relevance: {type(relevance)}, {relevance}")
+        # print(f"Recency: {recency}")
+        # print(f"Importance: {importance}")
+        # print(f"Relevance: {relevance}")
 
         # Calculate the total score by summing the scaled scores
         total_score = recency + importance + relevance
 
-        # Combine total scores with their corresponding node IDs into tuples and return
-        return list(zip(total_score, node_ids))
+        # Combine node IDs with their corresponding total scores into tuples and return
+        return zip(list(total_score), node_ids)
 
     @classmethod
     def _calculate_node_recency(
-        cls,
-        character,
-        memory_ids,
-        standardize: bool = True,
-        minmax_scale: bool = True,
+        cls, character, memory_ids, minmax_scale: bool = True
     ) -> np.ndarray:
         """
         Calculate the recency scores for a list of memory nodes based on their age using an exponential decay assumption.
@@ -627,7 +473,6 @@ class Retrieve:
         Args:
             character: The character whose memory is being evaluated.
             memory_ids: A list of memory node IDs for which recency scores are calculated.
-            standardize (bool): Whether to standardize the scores. Defaults to True.
             minmax_scale (bool): Whether to normalize the recency scores between 0 and 1. Defaults to True.
 
         Returns:
@@ -643,30 +488,19 @@ class Retrieve:
         # This results in a list of recency scores, where more recent nodes have higher scores
         recency = [character.memory.gamma ** (latest_node - i) for i in memory_ids]
 
-        # Standardize the recency scores
-        if standardize:
-            std_dev = np.std(recency, axis=0)
-            # Avoid division by zero by checking if std_dev is not zero
-            recency = (
-                (recency - np.mean(recency, axis=0)) / std_dev
-                if std_dev.all() != 0
-                else recency
-            )
+        # Standardize recency
+        recency = (recency - np.mean(recency)) / np.std(recency)
 
         # Normalize the recency scores to a range between 0 and 1 for consistent scaling
-        if minmax_scale:
-            recency = Retrieve._minmax_normalize(recency, 0, 1)
-
-        # Return the recency scores as a numpy array
-        return np.array(recency)
+        return (
+            Retrieve._minmax_normalize(recency, 0, 1)
+            if minmax_scale
+            else np.array(recency)
+        )
 
     @classmethod
     def _calculate_node_importance(
-        cls,
-        character,
-        memory_ids,
-        standardize: bool = True,
-        minmax_scale: bool = True,
+        cls, character, memory_ids, minmax_scale: bool = True
     ) -> np.ndarray:
         """
         Calculate the importance scores for a list of memory nodes.
@@ -675,7 +509,6 @@ class Retrieve:
         Args:
             character: The character whose memory is being evaluated.
             memory_ids: A list of memory node IDs for which importance scores are calculated.
-            standardize (bool): Whether to standardize the scores. Defaults to True.
             minmax_scale (bool): Whether to normalize the importance scores between 0 and 1. Defaults to True.
         Returns:
             ndarray: An array of normalized importance scores for the specified memory nodes, scaled between 0 and 1.
@@ -686,21 +519,15 @@ class Retrieve:
             character.memory.observations[i].node_importance for i in memory_ids
         ]
 
-        # Standardize the importance scores, handling potential division by zero
-        if standardize:
-            mean_importance = np.mean(importances)
-            std_importance = np.std(importances)
-            if std_importance > 0:  # Check to avoid division by zero
-                importances = (importances - mean_importance) / std_importance
-            else:
-                importances = np.zeros_like(importances)  # Set to zero if std is zero
+        # Standardize importance
+        importances = (importances - np.mean(importances)) / np.std(importances)
 
-        # Normalize the importance scores to a range between 0 and 1 for consistent scaling
-        if minmax_scale:
-            importances = Retrieve._minmax_normalize(importances, 0, 1)
-
-        # Return the importance scores as a numpy array
-        return np.array(importances)
+        # Normalize and return the importance scores to a range between 0 and 1 for consistent scaling
+        return (
+            Retrieve._minmax_normalize(importances, 0, 1)
+            if minmax_scale
+            else np.array(importances)
+        )
 
     @classmethod
     def _calculate_node_relevance(
@@ -712,7 +539,7 @@ class Retrieve:
                 str,
                 Union[
                     dict[str, Tuple[Union[int, Tuple[float, int]], np.ndarray]],
-                    dict[str, dict[str, np.ndarray]],
+                    dict[str, dict[str, np.ndarray]]
                 ],
             ],
             dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
@@ -721,7 +548,6 @@ class Retrieve:
         ],
         percentile: float = 0.75,
         method: str = "mean",
-        standardize: bool = True,
         minmax_scale: bool = True,
         weighted: bool = False,
     ) -> np.ndarray:
@@ -738,7 +564,6 @@ class Retrieve:
             list[str], str]): An optional search query to determine relevance. If not provided, default queries are used.
             percentile (float): The percentile threshold to filter relevance scores (default is 0.75).
             method (str): The method to use for aggregation of relevance scores ('mean' or 'median', default is 'mean').
-            standardize (bool): Whether to standardize the scores. Defaults to True.
             minmax_scale (bool): Whether to normalize the relevance scores between 0 and 1. Defaults to True.
             weighted (bool): Whether to use weighted retrieval. Defaults to False.
 
@@ -755,19 +580,14 @@ class Retrieve:
 
         # Check if a query is provided to determine relevance
         if query:
-            if isinstance(query, str):
-                # Compute the embeddings for the query
-                query_embeddings = Retrieve.gpt_handler.generate_embeddings([query])
-            elif isinstance(query, list):
-                # Compute the embeddings for the query
-                query_embeddings = Retrieve.gpt_handler.generate_embeddings(query)
-            elif isinstance(query, dict):
-                # If a query is a dictionary with embeddings, extract the embeddings
-                if isinstance(query, dict) and "embeddings" in query:
-                    query_embeddings = [
-                        embedding if isinstance(embedding, np.ndarray) else embedding[1]
-                        for embedding in query["embeddings"].values()
-                    ]
+            # Compute the embeddings for the query, ensuring a list is returned
+            query_embeddings = list(Retrieve.gpt_handler.generate_embeddings(query))
+            # If a query is a dictionary with embeddings, extract the embeddings
+            elif isinstance(query, dict) and "embeddings" in query:
+                query_embeddings = [
+                    embedding if isinstance(embedding, np.ndarray) else embedding[1]
+                    for embedding in query["embeddings"].values()
+                ]
             else:
                 # raise an error if the query is not in the correct format
                 raise ValueError(f"Query is not in the correct format: {query}")
@@ -778,75 +598,59 @@ class Retrieve:
             default_embeddings = character.memory.get_query_embeddings()
             relevances = cosine_similarity(memory_embeddings, default_embeddings)
 
-        # # Standardize the scored_relevances
-        # if standardize:
-        #     scored_relevances = (
-        #         scored_relevances - np.mean(scored_relevances)
-        #     ) / np.std(scored_relevances)
+        # Get aggregated relevance scores across all queries
+        scored_relevances = Retrieve._score_cos_sim(
+            relevances, percentile=percentile, method=method
+        )
+
+        # Standardize scored relevance
+        scored_relevances = (scored_relevances - np.mean(scored_relevances)) / np.std(
+            scored_relevances
+        )
 
         if weighted:
             # Get the weights for each query embedding
             weights = [
-                (
-                    embedding[0]
-                    if isinstance(embedding[0], int | float)
-                    else (
-                        (embedding[0][0], embedding[0][1])
-                        if isinstance(embedding[0], tuple)
-                        else ValueError(f"Invalid weight type: {embedding[0]}")
-                    )
-                )
+                embedding[0]
+                if isinstance(embedding[0], int)
+                else (embedding[0][0], embedding[0][1])
+                if isinstance(embedding[0], tuple)
+                else ValueError(f"Invalid weight type: {embedding[0]}")
                 for embedding in query["embeddings"].values()
             ]
 
-            # # Standardize weights
-            # if standardize:
-            #     weights = (weights - np.mean(weights, axis=0)) / np.std(weights, axis=0)
+            # Standardize weights
+            weights = (weights - np.mean(weights, axis=0)) / np.std(weights, axis=0)
 
             # Take a weighted average of the recency and importance weights for each query embedding
             recency_scaler = 0.5
             importance_scaler = 0.5
 
             weights = [
-                (recency_scaler * weight[0], importance_scaler * weight[1])
+                recency_scaler * weight[0] + importance_scaler * weight[1]
                 for weight in weights
             ]
 
-            # # Standardize weights after averaging
-            # if standardize:
-            #     weights = (weights - np.mean(weights)) / np.std(weights)
+            # Standardize weights after averaging
+            weights = (weights - np.mean(weights)) / np.std(weights)
 
-            # # Weight the relevance scores by the supplied query embedding importance scores
-            # scored_relevances = [
-            #     (scored_relevance * weight[0], scored_relevance * weight[1])
-            #     for scored_relevance, weight in zip(scored_relevances, weights)
-            # ]
+            # Weight the relevance scores by the supplied query embedding importance scores
+            scored_relevances = [
+                scored_relevance * weight
+                for scored_relevance, weight in zip(scored_relevances, weights)
+            ]
 
-        # Get aggregated relevance scores across all queries
-        scored_relevances = Retrieve._score_cos_sim(
-            relevances, percentile=percentile, method=method, weights=weights if weighted else None
+        # Normalize the relevance scores to a range between 0 and 1 for consistent scaling
+        return (
+            Retrieve._minmax_normalize(scored_relevances, 0, 1)
+            if minmax_scale
+            else np.array(scored_relevances)
         )
-
-        # Standardize the scored_relevances
-        if standardize:
-            std_dev = np.std(scored_relevances, axis=0)
-            # Avoid division by zero by checking if std_dev is not zero
-            scored_relevances = (
-                scored_relevances - np.mean(scored_relevances, axis=0)
-            ) / std_dev if std_dev.all() != 0 else scored_relevances
-
-        # # TODO: Modify _minmax_normalize to work with weighted scores
-        # # Normalize the scored_relevances to a range between 0 and 1 for consistent scaling
-        # if minmax_scale:
-        #     scored_relevances = Retrieve._minmax_normalize(scored_relevances, 0, 1)
-
-        # Return the scored relevance scores as a numpy array
-        return np.array(scored_relevances)
 
     @classmethod
     def _get_relevant_memory_ids(
         cls,
-        search_keys: dict[str, np.ndarray],
+        search_keys: dict[str, dict[str, np.ndarray]],
         character: "Character",
         memory_types: list[MemoryType],
         threshold: float = 0.45,
@@ -854,14 +658,15 @@ class Retrieve:
     ) -> list[int]:
         """
         Retrieve a list of memory node IDs that are relevant to the provided search keywords. This function aggregates
-        node IDs based on keywords and their associated search words from the character's memory.
+        node IDs based on keyword types and their associated search words from the character's memory.
 
         Args:
-            search_keys (dict[str, np.ndarray]): A dictionary where keys are keywords and values are their embeddings.
+            search_keys (dict[str, dict[str, np.ndarray]]): A dictionary where keys are keyword types and values
+                                                            are dictionaries of keywords mapped to their embeddings.
             character (Character): The character whose memory is being queried for relevant node IDs.
             memory_types (list[MemoryType]): A list of memory types to consider during retrieval.
             threshold (float): The cosine similarity threshold to consider a keyword as a match (default is 0.5).
-            get_all (bool): If True, returns all node IDs. Defaults to False.
+            get_all (bool): If True, returns a dictionary of memory types and their associated node IDs. Defaults to False.
 
         Returns:
             list[int]: A list of unique memory node IDs that match the search keywords.
@@ -900,9 +705,13 @@ class Retrieve:
             # FOR DEBUGGING
             print(f"All Node IDs: {all_node_ids}")
 
-        # Get the embeddings of all search words
+        # Flatten the search keys dictionary to get all embeddings
         search_word_embeddings = np.array(
-            [embedding for embedding in search_keys.values()]
+            [
+                embedding
+                for kw_embedding_dict in search_keys.values()
+                for embedding in kw_embedding_dict.values()
+            ]
         )
 
         # Reshape search_word_embeddings if it's a 1D array
@@ -910,7 +719,9 @@ class Retrieve:
             search_word_embeddings = search_word_embeddings.reshape(-1, 1)
 
         # Get the embeddings of all keywords
-        keyword_embeddings = np.array(MemoryStream.get_keyword_embeddings(all_keywords))
+        keyword_embeddings = np.array(
+            [character.memory.keyword_embeddings[kw] for kw in all_keywords]
+        )
 
         # Reshape keyword_embeddings if it's a 1D array
         if keyword_embeddings.ndim == 1:
@@ -922,35 +733,38 @@ class Retrieve:
         ### THIS BLOCK IS FOR DEBUGGING ###
         if cls.DEBUG_MODE:
             # Iterate over each search word and its corresponding similarity scores (printing scores)
-            for search_word, search_word_embedding in search_keys.items():
-                search_word_similarities = cosine_similarity(
-                    [search_word_embedding], keyword_embeddings
-                )[0]
-                for i, similarity in enumerate(search_word_similarities):
-                    keyword = all_keywords[i]
-                    print(
-                        f"Cosine similarity between search word '{search_word}' and keyword '{keyword}': {similarity}"
-                    )
-                    if similarity >= threshold:
-                        print(f"Similarity >= threshold: {similarity} >= {threshold}")
-                        # Filter node IDs to include only those with specific valid memory types
-                        valid_node_ids = [
-                            node_id
-                            for node_id in all_node_ids[i]
-                            if character.memory.get_observation(node_id)
-                            and character.memory.get_observation_type(node_id)
-                            in (
-                                memory_types
-                                if isinstance(memory_types, list)
-                                else [memory_types]
-                            )
-                        ]
-                        # memory_ids.extend(valid_node_ids)
+            for search_word_type, kw_embedding_dict in search_keys.items():
+                for search_word, search_word_embedding in kw_embedding_dict.items():
+                    search_word_similarities = cosine_similarity(
+                        [search_word_embedding], keyword_embeddings
+                    )[0]
+                    for i, similarity in enumerate(search_word_similarities):
+                        keyword = all_keywords[i]
                         print(
-                            f"Memory IDs: {[character.memory.get_observation(node_id) for node_id in valid_node_ids]}"
+                            f"Cosine similarity between search word '{search_word}' and keyword '{keyword}': {similarity}"
                         )
-                    else:
-                        print(f"Similarity < threshold: {similarity} < {threshold}")
+                        if similarity >= threshold:
+                            print(
+                                f"Similarity >= threshold: {similarity} >= {threshold}"
+                            )
+                            # Filter node IDs to include only those with specific valid memory types
+                            valid_node_ids = [
+                                node_id
+                                for node_id in all_node_ids[i]
+                                if character.memory.get_observation(node_id)
+                                and character.memory.get_observation_type(node_id)
+                                in (
+                                    memory_types
+                                    if isinstance(memory_types, list)
+                                    else [memory_types]
+                                )
+                            ]
+                            # memory_ids.extend(valid_node_ids)
+                            print(
+                                f"Memory IDs: {[character.memory.get_observation(node_id) for node_id in valid_node_ids]}"
+                            )
+                        else:
+                            print(f"Similarity < threshold: {similarity} < {threshold}")
 
         # Iterate over each search word and its corresponding similarity scores
         for search_word_similarities in similarities:
@@ -975,8 +789,8 @@ class Retrieve:
     @classmethod
     def _gather_keywords_for_search(
         cls,
-        game: Game,
-        character: Character,
+        game,
+        character,
         query: Union[
             dict[
                 str,
@@ -988,8 +802,7 @@ class Retrieve:
             list[str],
             str,
         ] = None,
-        memory_lookback: int | None = None,
-    ) -> dict[str, np.ndarray]:
+    ) -> dict[str, dict[str, np.ndarray]]:
         """
         Collect keywords for searching based on the character's recent memories, goals, and an optional query.
         This function extracts relevant keywords from the character's observations, current goals, and the provided
@@ -1003,7 +816,8 @@ class Retrieve:
             list[str], str]): An optional search query to determine relevance. If not provided, default queries are used.
 
         Returns:
-            dict[str, np.ndarray]: A dictionary of keywords mapping to their embeddings.
+            dict[str, dict[str, np.ndarray]]: A dictionary of keyword types mapping to dictionaries of keywords and
+                                              their embeddings.
         """
 
         if cls.DEBUG_MODE:
@@ -1013,39 +827,46 @@ class Retrieve:
         # Initialize an empty dictionary to store keywords and their embeddings for retrieval
         retrieval_kwds_with_embeddings = {}
 
-        # Initialize a list to store missing keywords for batch generation
-        missing_keywords = []
+        # Initialize a dictionary to store missing keywords for batch generation
+        missing_keywords = {}
 
         ### 1. Gather keywords from the last 'n' memories, simulating "short term memory" ###
 
         # Iterate over the last 'n' memories
-        lookback = memory_lookback if memory_lookback else character.memory.lookback
-        for node in character.memory.observations[-lookback :]:
+        for node in character.memory.observations[-character.memory.lookback :]:
             if cls.DEBUG_MODE:
                 # FOR DEBUGGING
                 print(f"Node: {node.node_description}")
                 print(f"Node Keywords: {node.node_keywords}")
 
-            # Get the node's keywords
-            if keywords := node.node_keywords:
-                # Check embeddings for all keywords
-                keyword_embeddings = MemoryStream.get_keyword_embeddings(keywords)
+            # Extract keywords from the node's description
+            if node_kwds := game.parser.extract_keywords(node.node_description):
 
-                # Handle missing embeddings
-                for keyword, keyword_embedding in zip(keywords, keyword_embeddings):
-                    # If the embedding is missing, add it to the list for batch generation
-                    if keyword_embedding is None or (
-                        isinstance(keyword_embedding, np.ndarray)
-                        and not keyword_embedding.size
-                    ):
-                        missing_keywords.append(keyword)
-                    else:
-                        retrieval_kwds_with_embeddings[keyword] = keyword_embedding
+                # Iterate over the extracted keyword types
+                for kw_type, keywords in node_kwds.items():
+                    if kw_type not in retrieval_kwds_with_embeddings:
+                        retrieval_kwds_with_embeddings[kw_type] = {}
+
+                    # Check embeddings for all keywords
+                    keyword_embeddings = character.memory.get_keyword_embeddings(keywords)
+
+                    # Handle missing embeddings
+                    for keyword, keyword_embedding in zip(keywords, keyword_embeddings):
+                        # If the embedding is missing, add it to the list for batch generation
+                        if keyword_embedding is None or (
+                            isinstance(keyword_embedding, np.ndarray)
+                            and not keyword_embedding.size
+                        ):
+                            if kw_type not in missing_keywords:
+                                missing_keywords[kw_type] = []
+                            missing_keywords[kw_type].append(keyword)
+                        else:
+                            retrieval_kwds_with_embeddings[kw_type][keyword] = keyword_embedding
 
         ### 2. Gather keywords from the character's current goals ###
 
         try:
-            # Attempt to retrieve the current goals for the current round
+            # Attempt to retrieve the current goals for the current round as a string
             current_goals = character.goals.get_goals(
                 round=game.round,
                 priority="all",
@@ -1060,7 +881,7 @@ class Retrieve:
 
         except (AttributeError, KeyError):
             try:
-                # Attempt to retrieve the current goals for the previous round
+                # Attempt to retrieve the current goals for the previous round as a string
                 current_goals = character.goals.get_goals(
                     round=max(game.round - 1, 0),
                     priority="all",
@@ -1078,24 +899,19 @@ class Retrieve:
 
         # If current goals are available, extract keywords from them and combine with existing keywords
         if current_goals:
-            if keywords := {
-                kw
-                for node_id in current_goals
-                for kw in character.memory.get_observation_keywords(node_id)
-            }:
-                # Check embeddings for all keywords
-                keyword_embeddings = MemoryStream.get_keyword_embeddings(keywords)
-
-                # Handle missing embeddings
-                for keyword, keyword_embedding in zip(keywords, keyword_embeddings):
-                    # If the embedding is missing, add it to the list for batch generation
-                    if keyword_embedding is None or (
-                        isinstance(keyword_embedding, np.ndarray)
-                        and not keyword_embedding.size
-                    ):
-                        missing_keywords.append(keyword)
-                    else:
-                        retrieval_kwds_with_embeddings[keyword] = keyword_embedding
+            for node_id in current_goals:
+                if goal_description := character.memory.get_observation_description(
+                    node_id
+                ):
+                    if goal_kwds := game.parser.extract_keywords(goal_description):
+                        for kw_type, keywords in goal_kwds.items():
+                            if kw_type not in retrieval_kwds_with_embeddings:
+                                retrieval_kwds_with_embeddings[kw_type] = {}
+                            for keyword in keywords:
+                                # Add the keyword and its embedding to the retrieval dictionary
+                                retrieval_kwds_with_embeddings[kw_type][keyword] = (
+                                    character.memory.get_keyword_embedding(keyword)
+                                )
 
         ### 3. Gather keywords from the provided query, if any ###
 
@@ -1105,64 +921,52 @@ class Retrieve:
             elif isinstance(query, (list, tuple, set)):
                 for q in query:
                     if query_kwds := game.parser.extract_keywords(q):
-                        keywords = [
-                            keyword
-                            for keywords in query_kwds.values()
-                            for keyword in keywords
-                        ]
-                        keyword_embeddings = MemoryStream.get_keyword_embeddings(
-                            keywords
-                        )
-                        for keyword, keyword_embedding in zip(
-                            keywords, keyword_embeddings
-                        ):
-                            if keyword_embedding is None or (
-                                isinstance(keyword_embedding, np.ndarray)
-                                and not keyword_embedding.size
-                            ):
-                                missing_keywords.append(keyword)
-                            else:
-                                retrieval_kwds_with_embeddings[keyword] = (
-                                    keyword_embedding
-                                )
-
-            elif isinstance(query, dict):
-                # {'embeddings': {'query': embedding}, 'keywords': {'kw_type': {'keyword': embedding}}}
-                if "keywords" in query:
-                    for kw_type, keywords in query["keywords"].items():
-                        if isinstance(keywords, (dict, OrderedDict)) and all(
-                            isinstance(kw, np.ndarray) for kw in keywords.values()
-                        ):
-                            retrieval_kwds_with_embeddings.update(keywords)
-                        else:
-                            keyword_embeddings = MemoryStream.get_keyword_embeddings(
-                                keywords
-                            )
-                            for keyword, keyword_embedding in zip(
-                                keywords, keyword_embeddings
-                            ):
+                        for kw_type, keywords in query_kwds.items():
+                            if kw_type not in retrieval_kwds_with_embeddings:
+                                retrieval_kwds_with_embeddings[kw_type] = {}
+                            keyword_embeddings = character.memory.get_keyword_embeddings(keywords)
+                            for keyword, keyword_embedding in zip(keywords, keyword_embeddings):
                                 if keyword_embedding is None or (
                                     isinstance(keyword_embedding, np.ndarray)
                                     and not keyword_embedding.size
                                 ):
-                                    missing_keywords.append(keyword)
+                                    if kw_type not in missing_keywords:
+                                        missing_keywords[kw_type] = []
+                                    missing_keywords[kw_type].append(keyword)
                                 else:
-                                    retrieval_kwds_with_embeddings[keyword] = (
-                                        keyword_embedding
-                                    )
+                                    retrieval_kwds_with_embeddings[kw_type][keyword] = keyword_embedding
+            elif isinstance(query, dict):
+                # {'embeddings': {'query': embedding}, 'keywords': {'kw_type': {'keyword': embedding}}}
+                print("DEBUGGING: Query:", query["keywords"].items())
+                if "keywords" in query:
+                    for kw_type, keywords in query["keywords"].items():
+                        if kw_type not in retrieval_kwds_with_embeddings:
+                            retrieval_kwds_with_embeddings[kw_type] = {}
+                        keyword_embeddings = character.memory.get_keyword_embeddings(keywords)
+                        for keyword, keyword_embedding in zip(keywords, keyword_embeddings):
+                            if keyword_embedding is None or (
+                                isinstance(keyword_embedding, np.ndarray)
+                                and not keyword_embedding.size
+                            ):
+                                if kw_type not in missing_keywords:
+                                    missing_keywords[kw_type] = []
+                                missing_keywords[kw_type].append(keyword)
+                            else:
+                                retrieval_kwds_with_embeddings[kw_type][keyword] = keyword_embedding
 
         # Generate embeddings for missing keywords in batches
-        if missing_keywords:
-            # Batch generate embeddings for all missing keywords
-            embeddings = Retrieve.gpt_handler.generate_embeddings(missing_keywords)
-            generated_embeddings = {
-                keyword: embedding
-                for keyword, embedding in zip(missing_keywords, embeddings)
-            }
+        for kw_type, keywords in missing_keywords.items():
+            if keywords:
+                # Batch generate embeddings for all missing keywords of this type
+                embeddings = Retrieve.gpt_handler.generate_embeddings(keywords)
+                generated_embeddings = {keyword: embedding for keyword, embedding in zip(keywords, embeddings)}
 
-            # Store the generated embeddings and add them to the retrieval dictionary in a single operation
-            MemoryStream.keyword_embeddings.update(generated_embeddings)
-            retrieval_kwds_with_embeddings.update(generated_embeddings)
+                # Store the generated embeddings and add them to the retrieval dictionary
+                for keyword, embedding in generated_embeddings.items():
+                    character.memory.keyword_embeddings[keyword] = (
+                        embedding  # Cache the embedding
+                    )
+                    retrieval_kwds_with_embeddings[kw_type][keyword] = embedding
 
         # Return the dictionary of gathered keywords and their embeddings for retrieval
         return retrieval_kwds_with_embeddings
@@ -1228,25 +1032,21 @@ class Retrieve:
 
     @classmethod
     def _score_cos_sim(
-        cls,
-        relevances: np.ndarray,
-        percentile: float = 0.9,
-        method: Literal["mean", "median"] = "mean",
-        weights: np.ndarray | None = None,
+        cls, relevances: np.ndarray, percentile: float = 0.9, method: str = "mean"
     ) -> np.ndarray:
         """
         Calculate the mean or median of the cosine similarity scores above a specified percentile.
 
         Args:
-            relevances (np.ndarray): Array of shape (m, q) containing cosine similarity scores. m is the number of
-                                     memory nodes and q is the number of queries.
+            relevances (np.ndarray): Array of shape (m, q) containing cosine similarity scores.
             percentile (float): The percentile threshold (e.g., 0.9) to filter the scores.
-            method (Literal["mean", "median"]): The method to use for aggregation ('mean' or 'median').
-            weights (np.ndarray | None): An array of shape (m) containing weights for each memory node.
+            method (str): The method to use for aggregation ('mean' or 'median').
 
         Returns:
             np.ndarray: An array of shape (m) with the aggregated scores.
         """
+        if method not in ["mean", "median"]:
+            raise ValueError("Method must be either 'mean' or 'median'")
 
         # Calculate the threshold value for the specified percentile
         threshold = np.percentile(relevances, percentile * 100, axis=1)
@@ -1259,39 +1059,11 @@ class Retrieve:
             ]
         )
 
-        # If weights are provided, multiply the filtered scores by their respective weights
-        if weights is not None:
-            # Get the indices of the scores that are above the threshold
-            filtered_indices = np.array(
-                [np.where(relevances[i] >= threshold[i])[0] for i in range(relevances.shape[0])]
-            )
-
-            # Multiply the filtered scores by their respective weights
-            weighted_scores = []
-            for i, indices in enumerate(filtered_indices):
-                # Extract the weights corresponding to the filtered indices
-                row_weights = [weights[idx] for idx in indices]
-                row_scores = filtered_scores[i]
-                # Check if weights are tuples or single values and multiply accordingly
-                if isinstance(row_weights[0], tuple):
-                    # Multiply each score by the corresponding tuple of weights
-                    weighted_row = [
-                        tuple(score * w for w in weight) for score, weight in zip(row_scores, row_weights)
-                    ]
-                else:
-                    # Multiply each score by the corresponding single weight
-                    weighted_row = [score * weight for score, weight in zip(row_scores, row_weights)]
-                weighted_scores.append(weighted_row)
-        else:
-            weighted_scores = filtered_scores
-
-        # Calculate the mean or median of the weighted scores
+        # Calculate the mean or median of the filtered scores
         if method == "mean":
-            # Compute the mean of the weighted scores
-            result = np.array([np.mean(scores, axis=0) for scores in weighted_scores])
+            result = np.array([np.mean(scores) for scores in filtered_scores])
         else:
-            # Compute the median of the weighted scores
-            result = np.array([np.median(scores, axis=0) for scores in weighted_scores])
+            result = np.array([np.median(scores) for scores in filtered_scores])
 
         return result
 
@@ -1302,17 +1074,13 @@ class Retrieve:
         character: "Character",
         query: Union[
             dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
-            dict[str, Union[dict[str, Tuple[Union[int, Tuple[float, int]], np.ndarray]],
-            dict[str, dict[str, np.ndarray]]]],
             list[str],
             str,
         ] = None,
         percentile: float = 0.8,
         method: str = "mean",
         threshold: float = 0.45,
-        standardize: bool = False,
         minmax_scale: bool = False,
-        weighted: bool = False
     ):
         """
         Retrieve relevant memory nodes for a given character based on a query.
@@ -1337,9 +1105,7 @@ class Retrieve:
             method (str, optional): The method to use for aggregation ('mean' or 'median'). Defaults to 'mean'.
             threshold (float, optional): The cosine similarity threshold to consider a keyword as a match (default is
                                          0.9).
-            standardize (bool, optional): Whether to standardize the scores. Defaults to False.
             minmax_scale (bool, optional): Whether to normalize the scores between 0 and 1. Defaults to False.
-            weighted (bool, optional): Whether to weight the scores based on the weights list. Defaults to False.
 
         Returns:
             list or None: A list of memory node descriptions or indexed descriptions, or None if no relevant memory
@@ -1375,44 +1141,27 @@ class Retrieve:
                 character=character,
                 memory_types=[memory_type],
                 threshold=threshold,
-                get_all=True,  # if memory_type == MemoryType.PERSONA else False,
+                get_all=True if memory_type == MemoryType.PERSONA else False,
             )
 
             # If no relevant memory node IDs are found, set the score to 0
             if len(memory_node_ids) == 0:
-                pass
+                memory_type_scores[memory_type] = [0]
 
             else:
-                # Rank the memory nodes based on recency, importance, and relevance and their dictionary of scores to
-                # the memory types scores dictionary
-                memory_type_scores[memory_type] = Retrieve._rank_nodes(
-                    character=character,
-                    node_ids=memory_node_ids,
-                    query=query,
-                    percentile=percentile,
-                    method=method,
-                    standardize=standardize,
-                    minmax_scale=minmax_scale,
-                    separate_scores=True,
-                    weighted=weighted,
+                # Rank the memory nodes based on recency, importance, and relevance
+                ranked_memory_ids = Retrieve._rank_nodes(
+                    character, memory_node_ids, query, percentile, method, minmax_scale
                 )
+
+                memory_type_scores[memory_type] = [x[1] for x in ranked_memory_ids]
 
         return memory_type_scores
 
-    # TODO: Consider removing the keyword types from the output dictionary
     @classmethod
     def get_query_keywords_and_embeddings(
-        cls,
-        game: "Game",
-        query: Union[list[str], str],
-        scores: list[Union[int, Tuple[int], Tuple[float, int]]] | None = None,
-    ) -> dict[
-        str,
-        Union[
-            OrderedDict[str, np.ndarray],
-            dict[str, dict[str, Union[Tuple[int], Tuple[int, int], np.ndarray]]],
-        ],
-    ]:
+        cls, game: "Game", query: Union[list[str], str]
+    ) -> dict[str, Union[OrderedDict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]]:
         """
         Convert a list of query strings into a dictionary of 'keywords' and 'embeddings' keys.
 
@@ -1423,7 +1172,6 @@ class Retrieve:
         Args:
             game (Game): The game context that provides parsing capabilities for extracting keywords.
             query (Union[list[str], str]): A list of query strings or a single query string to be converted.
-            scores (list[Union[int, Tuple[int], Tuple[float, int]]] | None): A list of importance scores for the queries.
 
         Returns:
             dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]]: A dictionary containing the
@@ -1435,34 +1183,37 @@ class Retrieve:
 
         # Initialize the result dictionary with 'keywords' and 'embeddings' keys
         result = {"keywords": {}, "embeddings": OrderedDict()}
-
+        
         # Initialize a dictionary to store missing keywords
         missing_keywords = {}
 
-        # If the query is a single string, convert it to a list
-        if isinstance(query, str):
-            query = [query]
-
         # Compute the embeddings for the query, ensuring a list is returned
-        query_embeddings = Retrieve.gpt_handler.generate_embeddings(query)
+        query_embeddings = list(Retrieve.gpt_handler.generate_embeddings(query))
 
         # Iterate over each query string in the list
-        for idx, (q, embedding) in enumerate(zip(query, query_embeddings)):
+        for q, embedding in zip(query, query_embeddings):
             # Extract keywords from the query string using the extract_keywords method
             keywords_dict = game.parser.extract_keywords(q)
 
-            if cls.DEBUG_MODE:
-                print(f"\n\nQuery: {q}\nKeywords: {keywords_dict}")
-
             # Add the query string and its embedding to the 'embeddings' key in the result dictionary
-            result["embeddings"][q] = (
-                embedding if scores is None else (scores[idx], embedding)
-            )
+            result["embeddings"][q] = embedding
 
+            # Iterate over the keyword types and their corresponding keywords
             for kw_type, keywords in keywords_dict.items():
                 if kw_type not in result["keywords"]:
                     result["keywords"][kw_type] = {}
-                keyword_embeddings = MemoryStream.get_keyword_embeddings(keywords)
+                for keyword in keywords:
+                    # Generate embeddings for each keyword
+                    keyword_embedding = Retrieve.gpt_handler.generate_embeddings(
+                        keyword
+                    )
+                    # Add the keyword and its embedding to the 'keywords' key in the result dictionary
+                    result["keywords"][kw_type][keyword] = keyword_embedding
+                    
+            for kw_type, keywords in keywords_dict.items():
+                if kw_type not in result["keywords"]:
+                    result["keywords"][kw_type] = {}
+                keyword_embeddings = character.memory.get_keyword_embeddings(keywords)
                 for keyword, keyword_embedding in zip(keywords, keyword_embeddings):
                     if keyword_embedding is None or (
                         isinstance(keyword_embedding, np.ndarray)
@@ -1472,20 +1223,20 @@ class Retrieve:
                             missing_keywords[kw_type] = []
                         missing_keywords[kw_type].append(keyword)
                     else:
-                        result["keywords"][kw_type][keyword] = keyword_embedding
-
+                        retrieval_kwds_with_embeddings[kw_type][keyword] = keyword_embedding
+                        
         # Generate embeddings for missing keywords in batches
         for kw_type, keywords in missing_keywords.items():
             if keywords:
                 # Batch generate embeddings for all missing keywords of this type
                 embeddings = Retrieve.gpt_handler.generate_embeddings(keywords)
-                generated_embeddings = {
-                    keyword: embedding
-                    for keyword, embedding in zip(keywords, embeddings)
-                }
+                generated_embeddings = {keyword: embedding for keyword, embedding in zip(keywords, embeddings)}
 
-                # Store the generated embeddings and add them to the retrieval dictionary in a single operation
-                MemoryStream.keyword_embeddings.update(generated_embeddings)
-                result["keywords"][kw_type].update(generated_embeddings)
+                # Store the generated embeddings and add them to the retrieval dictionary
+                for keyword, embedding in generated_embeddings.items():
+                    character.memory.keyword_embeddings[keyword] = (
+                        embedding  # Cache the embedding
+                    )
+                    result["keywords"][kw_type][keyword] = embedding
 
         return result

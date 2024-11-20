@@ -31,6 +31,7 @@ from ..utils.consts import get_config_file, get_assets_path, get_models_config
 if circular_import_prints:
     print(f"\t{__name__} calling imports for General")
 from ..utils.general import enumerate_dict_options, get_logger_extras
+
 if circular_import_prints:
     print(f"\t{__name__} calling imports for Prompts")
 from ..assets.prompts import (
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     if circular_import_prints:
         print(f"\t{__name__} calling imports for Character")
     from ..things.characters import Character
+
     if circular_import_prints:
         print(f"\t{__name__} calling imports for Game")
     from ..games import Game
@@ -65,7 +67,7 @@ class ClientInitializer:
         load_count (int): The number of times the API keys have been loaded.
         api_info (dict): The API key information loaded from the configuration.
         clients (dict): A dictionary storing the initialized clients for each organization.
-        
+
     Class Attributes:
         VALID_CLIENT_PARAMS (set): A set of valid client parameters that can be used for client initialization.
 
@@ -261,7 +263,8 @@ class GptCallHandler:
     Attributes:
         model_limits (ClassVar): Limits for the model's input/output.
         client_handler (ClassVar): An instance of ClientInitializer to manage API clients.
-        calls_made (ClassVar[int]): A count of the total API calls made.
+        gpt_calls_made (ClassVar[int]): A count of the total GPT completion API calls made.
+        embedding_calls_made (ClassVar[int]): A count of the total embedding API calls made.
         input_tokens_processed (ClassVar[int]): A count of the total input tokens processed.
         output_tokens_processed (ClassVar[int]): A count of the total output tokens processed.
         embedding_tokens_processed (ClassVar[int]): A count of the total embedding tokens processed.
@@ -291,9 +294,13 @@ class GptCallHandler:
     client_handler: ClassVar = (
         ClientInitializer()
     )  # An instance of ClientInitializer to manage API client setup.
-    calls_made: ClassVar[int] = (
-        0  # Tracks the total number of API calls made by all instances.
+    gpt_calls_made: ClassVar[int] = (
+        0  # Tracks the total number of GPT completion API calls made by all instances.
     )
+    embedding_calls_made: ClassVar[int] = (
+        0  # Tracks the total number of embedding API calls made by all instances.
+    )
+
     input_tokens_processed: ClassVar[int] = (
         0  # Tracks the total number of input tokens processed by all instances.
     )
@@ -302,6 +309,9 @@ class GptCallHandler:
     )
     embedding_tokens_processed: ClassVar[int] = (
         0  # Tracks the total number of embedding tokens processed by all instances.
+    )
+    max_importance_score: ClassVar[int] = (
+        10  # The maximum importance score for an action.
     )
 
     # Instance variables that are unique to each instance of the class.
@@ -386,7 +396,9 @@ class GptCallHandler:
             return model_configs[model]
 
         # Log a warning and return the "miscellaneous" model configuration
-        logger.warning(f"Model configuration for {model} not found. Using 'miscellaneous' model configuration.")
+        logger.warning(
+            f"Model configuration for {model} not found. Using 'miscellaneous' model configuration."
+        )
         return model_configs.get("miscellaneous")
 
     def _save_init_params(self):
@@ -504,25 +516,43 @@ class GptCallHandler:
             setattr(self, param, value)
 
     @classmethod
-    def get_calls_count(cls):
+    def get_gpt_calls_count(cls):
         """
-        Returns the total number of API calls made across all instances of the class. This class method provides a way
-        to access the call count without needing an instance of the class.
+        Returns the total number of GPT completion API calls made across all instances of the class. This class method
+        provides a way to access the call count without needing an instance of the class.
 
         Returns:
-            int: The total number of API calls made.
+            int: The total number of GPT completion API calls made.
         """
 
-        return cls.calls_made
+        return cls.gpt_calls_made
 
     @classmethod
-    def increment_calls_count(cls):
+    def increment_gpt_calls_count(cls):
         """
-        Increments the total number of API calls made across all instances of the class. This class method updates the
-        call count, allowing for tracking of how many times the API has been accessed.
+        Increments the total number of GPT completion API calls made across all instances of the class. This class method
+        updates the call count, allowing for tracking of how many times the API has been accessed.
         """
 
-        cls.calls_made += 1
+        cls.gpt_calls_made += 1
+
+    @classmethod
+    def get_embedding_calls_count(cls):
+        """
+        Returns the total number of embedding API calls made across all instances of the class. This class method provides
+        a way to access the call count without needing an instance of the class.
+        """
+
+        return cls.embedding_calls_made
+
+    @classmethod
+    def increment_embedding_calls_count(cls):
+        """
+        Increments the total number of embedding API calls made across all instances of the class. This class method
+        updates the call count, allowing for tracking of how many times the API has been accessed.
+        """
+
+        cls.embedding_calls_made += 1
 
     @classmethod
     def get_input_tokens_processed(cls):
@@ -612,15 +642,20 @@ class GptCallHandler:
         cls.embedding_tokens_processed += add_on
 
     def generate(
-        self, system: str = None, user: str = None, messages: list = None, character: Character = None,
-        game: Game = None, **kwargs
+        self,
+        system: str = None,
+        user: str = None,
+        messages: list = None,
+        character: Character = None,
+        game: Game = None,
+        **kwargs,
     ) -> str:
         """
         Makes a call to the OpenAI API to generate a response based on the provided messages. This method can accept
         system and user messages directly or a list of messages, and it includes error handling and retry logic for
-        various API errors. It optionally accepts a character argument for GPT logging purposes and a game argument
-        to associate the call with a specific game instance. This method is a wrapper for making a call to the OpenAI
-        API. It expects a function as an argument that should produce the messages argument.
+        various API errors. It accepts an optional character argument for GPT logging purposes and a game argument to
+        associate the call with a specific game instance. This method is a wrapper for making a call to the OpenAI API.
+        It expects a function as an argument that should produce the messages argument.
 
         Args:
             system (str, optional): The system message to guide the behavior of the model.
@@ -628,7 +663,7 @@ class GptCallHandler:
             messages (list, optional): A list of messages to send to the model, overriding system and user parameters if
             provided.
             character (Character, optional): The character to use for the conversation.
-            game (Game, optional): The game instance associated with this GPT call.
+            game (Game, optional): The game instance associated with this GPT call. Defaults to None.
             **kwargs: Additional keyword arguments to pass to the OpenAI API call.
 
         Returns:
@@ -660,7 +695,7 @@ class GptCallHandler:
         # Attempt to make the API call with a maximum number of retries.
         while i < self.max_retries:
             try:
-                if 'response_format' in kwargs:
+                if "response_format" in kwargs:
                     response = self.client.beta.chat.completions.parse(
                         model=self.model,
                         messages=messages,
@@ -670,12 +705,14 @@ class GptCallHandler:
                         frequency_penalty=self.frequency_penalty,
                         presence_penalty=self.presence_penalty,
                         stop=self.stop,
-                        **kwargs
+                        **kwargs,
                     )
                     if response.choices[0].message.refusal:
                         self._log_gpt_error("Parsed response was a refusal.")
                         if i == self.max_retries - 1:
-                            raise Exception("Parsed response was a refusal after max retries.")
+                            raise Exception(
+                                "Parsed response was a refusal after max retries."
+                            )
                         i += 1
                         continue
                 else:
@@ -688,7 +725,7 @@ class GptCallHandler:
                         frequency_penalty=self.frequency_penalty,
                         presence_penalty=self.presence_penalty,
                         stop=self.stop,
-                        **kwargs
+                        **kwargs,
                     )
 
             except openai.APITimeoutError as e:
@@ -745,8 +782,12 @@ class GptCallHandler:
                         messages=messages,
                         response=response,
                         game=game,
-                        character=character
+                        character=character,
                     )
+                # else:
+                #     print("-"*30)
+                #     print("Messages", messages)  # Print the messages sent to GPT
+                #     print("Response", response.choices[0].message.content)  # Print the response from GPT
 
                 # If the API call is successful, update the token counts and increment the call count.
                 self._set_token_counts(
@@ -754,9 +795,9 @@ class GptCallHandler:
                 )  # Update the token counts based on the messages.
 
                 # print("incrementing the number of calls to GPT")  # Uncomment to log the increment action.
-                GptCallHandler.increment_calls_count()  # Increment the total number of API calls made.
+                GptCallHandler.increment_gpt_calls_count()  # Increment the total number of GPT completion API calls made.
 
-                if 'response_format' in kwargs:
+                if "response_format" in kwargs:
                     return response.choices[
                         0
                     ].message.parsed  # Return the content of the model's response.
@@ -767,20 +808,23 @@ class GptCallHandler:
 
             i += 1
 
-    def generate_embeddings(self, text: str, *args) -> np.ndarray:
+    def generate_embeddings(
+        self, text: Union[str, List[str]], *args
+    ) -> Union[np.ndarray, List[np.ndarray]]:
         """
-        Generates embeddings for the provided text using the OpenAI client.
+        Generates embeddings for the provided text or list of texts using the OpenAI client.
 
-        This method attempts to create an embedding vector for the specified text, handling various potential errors
+        This method attempts to create embedding vectors for the specified text(s), handling various potential errors
         that may arise during the API call. It includes retry logic for timeouts and rate limits, ensuring robust
         interaction with the OpenAI service.
 
         Args:
-            text (str): The input text for which to generate embeddings. If empty, the function returns None.
+            text (Union[str, List[str]]): The input text or list of texts for which to generate embeddings. If empty, the function returns None.
             *args: Additional parameters to be passed to the OpenAI client.
 
         Returns:
-            np.ndarray: A NumPy array containing the generated embedding vector, or None if the input text is empty.
+            Union[np.ndarray, List[np.ndarray]]: A NumPy array containing the generated embedding vector for a single text,
+            or a list of NumPy arrays for multiple texts, or None if the input text is empty.
 
         Raises:
             openai.AuthenticationError: If the API credentials are invalid.
@@ -790,13 +834,20 @@ class GptCallHandler:
         if not text:
             return None
 
+        # Ensure the input is a list for consistent processing.
+        if isinstance(text, str):
+            return_str = True
+            text = [text]
+        else:
+            return_str = False
+
         i = 0
         # Attempt to make the API call with a maximum number of retries.
         while i < self.max_retries:
             try:
-                # Create an embedding vector for the provided text using the OpenAI client.
+                # Create embedding vectors for the provided text(s) using the OpenAI client.
                 response = self.client.embeddings.create(
-                    input=[text], model=self.embedding_model, *args
+                    input=text, model=self.embedding_model, *args
                 )
             except openai.APITimeoutError as e:
                 # Handle timeout errors where the request took too long.
@@ -847,13 +898,19 @@ class GptCallHandler:
                 raise e  # Raise the error to stop execution.
             else:
                 # If the API call is successful, update the embedding token counts and increment the call count.
-                self._set_embedding_token_counts(text)
+                for t in text:
+                    self._set_embedding_token_counts(t)
 
                 # print("incrementing the number of calls to GPT")  # Uncomment to log the increment action.
-                GptCallHandler.increment_calls_count()  # Increment the total number of API calls made.
+                GptCallHandler.increment_embedding_calls_count()  # Increment the total number of embedding API calls made.
 
-                # Get the response embeddings, and convert them to a NumPy array for further processing or analysis.
-                return np.array(response.data[0].embedding)
+                # Get the response embeddings, and convert them to a list of NumPy arrays for further processing or
+                # analysis. If the input was a single text, return a single NumPy array instead of a list.
+                return (
+                    [np.array(embedding.embedding) for embedding in response.data]
+                    if not return_str
+                    else np.array(response.data[0].embedding)
+                )
 
     def _set_token_counts(self, response, system=None, user=None, messages=None):
         """
@@ -948,7 +1005,7 @@ class GptCallHandler:
             # GptCallHandler.
             GptCallHandler.update_embedding_token_count(embedding_tokens)
 
-    def _log_gpt_call(self, messages, response, game, character=None):
+    def _log_gpt_call(self, messages, response, game=None, character=None):
         """
         Logs the details of a GPT call, including the messages sent, the response received, and the game and character
         associated with the call if provided.
@@ -956,9 +1013,14 @@ class GptCallHandler:
         Args:
             messages (list): A list of message dictionaries representing the conversation history.
             response (dict): The response dictionary containing the model's response details.
-            game (Game): The game instance associated with the GPT call.
+            game (Game, optional): The game instance associated with the GPT call. Defaults to None.
             character (Character, optional): The character associated with the GPT call, used for logging.
         """
+
+        wrap_width = 120
+
+        if game is None:
+            return
 
         if circular_import_prints:
             print(f"\t{__name__} interior calling imports for Game")
@@ -972,19 +1034,27 @@ class GptCallHandler:
 
         # Format the messages from the log record.
         messages_list = []
+
         for message in messages:
-            messages_list.append(
-                f"{'-'*37} {message['role'].title()} {'-'*37}:\n\n{message['content']}" if message['role'].title() == 'User'
-                else f"{'-'*36} {message['role'].title()} {'-'*36}:\n\n{message['content']}"  # Format each message with its role.
-            )
-        messages = "\n\n".join(messages_list)  # Join formatted messages with double newlines.
+            messages_list.append((message["role"].title(), message["content"]))
+
+        # for message in messages:
+        #     role_title = message["role"].title()
+        #     role_length = len(role_title) + 3  # Account for spaces and colons
+        #     dashes_length = (wrap_width - role_length) // 2
+        #     messages_list.append(
+        #         f"{'-' * dashes_length} {role_title} {'-' * dashes_length}:\n\n{message['content']}"
+        #     )
+        # messages = "\n\n".join(
+        #     messages_list
+        # )  # Join formatted messages with double newlines.
 
         choices = response.choices[0]  # Get the first choice from the response.
 
         # Add relevant response information to the extras dictionary.
         extras["id"] = response.id
         extras["model"] = response.model
-        extras["messages"] = messages
+        extras["messages"] = messages_list
         extras["response"] = choices.message.content
         extras["finish_reason"] = choices.finish_reason
 
@@ -993,7 +1063,7 @@ class GptCallHandler:
         extras["top_p"] = self.top_p
         extras["frequency_penalty"] = self.frequency_penalty
         extras["presence_penalty"] = self.presence_penalty
-        
+
         # Extract and add token usage information to the message dictionary.
         usage = response.usage
         extras["prompt_tokens"] = usage.prompt_tokens
@@ -1266,7 +1336,7 @@ class GptCallHandler:
 
 
 def gpt_get_summary_description_of_action(
-    statement, call_handler: GptCallHandler, **handler_kwargs
+    statement, call_handler: GptCallHandler, game=None, **handler_kwargs
 ):
     """
     Generates a summary description of a specified action using the GPT model. This function constructs a message based
@@ -1274,6 +1344,7 @@ def gpt_get_summary_description_of_action(
     ensure consistent behavior.
 
     Args:
+        game (Game): The game instance associated with this GPT call.
         statement (str): The action statement for which a summary description is to be generated.
         call_handler (GptCallHandler): An instance of GptCallHandler used to interact with the GPT model.
         **handler_kwargs: Additional keyword arguments to update the parameters of the call handler.
@@ -1302,7 +1373,7 @@ def gpt_get_summary_description_of_action(
     ]
 
     # Generate the summary statement by calling the GPT model with the constructed messages.
-    summary_statement = call_handler.generate(messages=messages)
+    summary_statement = call_handler.generate(game=game, messages=messages)
 
     # Reset the call handler parameters to their original values after the first generation.
     call_handler.reset_defaults()
@@ -1312,7 +1383,7 @@ def gpt_get_summary_description_of_action(
 
 
 def gpt_get_action_importance(
-    statement: str, call_handler: GptCallHandler, **handler_kwargs
+    statement: str, call_handler: GptCallHandler, game=None, **handler_kwargs
 ):
     """
     Determines the importance of a specified action by generating a response from the GPT model. This function
@@ -1321,6 +1392,7 @@ def gpt_get_action_importance(
     Args:
         statement (str): The action statement for which the importance is to be evaluated.
         call_handler (GptCallHandler): An instance of GptCallHandler used to interact with the GPT model.
+        game (Game, optional): The game instance associated with this GPT call. Defaults to None.
         **handler_kwargs: Additional keyword arguments to update the parameters of the call handler.
 
     Returns:
@@ -1338,7 +1410,9 @@ def gpt_get_action_importance(
     call_handler.update_params(**handler_kwargs)
 
     # Retrieve the system prompt for evaluating action importance.
-    system = hp.action_importance_prompt
+    system = hp.action_importance_prompt.format(
+        max_importance_score=GptCallHandler.max_importance_score
+    )
 
     # Construct the messages to be sent to the GPT model, including the system and user roles.
     messages = [
@@ -1347,7 +1421,7 @@ def gpt_get_action_importance(
     ]
 
     # Generate the importance string by calling the GPT model with the constructed messages.
-    importance_str = call_handler.generate(messages=messages)
+    importance_str = call_handler.generate(game=game, messages=messages)
 
     # Reset the call handler parameters to their original values after the first generation.
     call_handler.reset_defaults()
@@ -1371,7 +1445,13 @@ def gpt_get_action_importance(
 
 
 def gpt_pick_an_option(
-    instructions, options, input_str, call_handler: GptCallHandler, **handler_kwargs
+    game,
+    instructions,
+    options,
+    input_str,
+    call_handler: GptCallHandler,
+    allow_multiple=False,
+    **handler_kwargs,
 ):
     """
     Selects the best option from a set of choices based on user input and system instructions using the GPT model. This
@@ -1381,15 +1461,16 @@ def gpt_pick_an_option(
     generates more text than is necessary), and then returns the option name.
 
     Args:
+        game (Game): The game instance associated with this GPT call.
         instructions (str): The system instructions that guide the model's response.
         options (dict): A dictionary mapping option descriptions to option names.
         input_str (str): The user input that is used to match against the options.
         call_handler (GptCallHandler): An instance of GptCallHandler used to interact with the GPT model.
+        allow_multiple (bool, optional): Whether to allow multiple options to be selected. Defaults to False.
         **handler_kwargs: Additional keyword arguments to update the parameters of the call handler.
 
     Returns:
-        str or None: The name of the selected option if a valid selection is made, or None if no valid selection is
-        found.
+        list: The names of the selected options if a valid selection is made.
 
     Raises:
         TypeError: If the provided call_handler is not an instance of GptCallHandler.
@@ -1405,19 +1486,25 @@ def gpt_pick_an_option(
     # Enumerate the options to create a string of choices and a list of option names.
     choices_str, options_list = enumerate_dict_options(options)
 
+    if allow_multiple:
+        choices_str += "\nReturn a list of all matching numbers separated by commas."
+    else:
+        choices_str += "\nReturn just the number of the best match."
+
     # Construct the messages to be sent to the GPT model, including the system instructions and user input.
     messages = [
         {
             "role": "system",
-            "content": "{instructions}\n\n{choices_str}\nReturn just the number of the best match.".format(
-                instructions=instructions, choices_str=choices_str
+            "content": "{instructions}\n\n{choices_str}".format(
+                instructions=instructions,
+                choices_str=choices_str,
             ),
         },
         {"role": "user", "content": input_str},
     ]
 
     # Call the OpenAI API to generate a selection based on the constructed messages.
-    selection = call_handler.generate(messages=messages)
+    selection = call_handler.generate(game=game, messages=messages)
 
     # Reset the call handler parameters to their original values after the first generation.
     call_handler.reset_defaults()
@@ -1426,11 +1513,20 @@ def gpt_pick_an_option(
     pattern = r"\d+"
 
     if not (matches := re.findall(pattern, selection)):
-        return None  # Return None if no matches were found in the selection string.
-    index = int(matches[0])  # Convert the first matched string to an integer index.
+        return []  # Return None if no matches were found in the selection string.
 
-    # Check if the index is within the bounds of the options list.
-    return None if index >= len(options_list) else options[options_list[index]]
+    if allow_multiple:
+        index = [
+            int(match) for match in matches
+        ]  # Convert all matched strings to integers.
+    else:
+        index = [
+            int(matches[0])
+        ]  # Convert the first matched string to an integer index.
+
+    selections = [options[options_list[i]] for i in index if 0 <= i < len(options_list)]
+
+    return selections
 
 
 def limit_context_length(
@@ -1452,8 +1548,10 @@ def limit_context_length(
         max_tokens (int): The maximum number of tokens allowed in the limited history.
         max_turns (int, optional): The maximum number of messages to retain in the limited history. Defaults to 1000.
         tokenizer (Tokenizer, optional): A tokenizer instance used to calculate token counts. Defaults to None, which
-        uses a default tokenizer.
-        keep_most_recent (bool, optional): If True, the function will trim the oldest messages first. Defaults to True.
+                                         uses a default tokenizer.
+        keep_most_recent (bool, optional): If True, the function will trim the oldest (leftmost) messages first.
+                                           Otherwise, it will trim the newest (rightmost) messages first. Defaults to
+                                           True.
         return_count (bool, optional): If True, the function will also return the total token count consumed. Defaults
         to False.
 
@@ -1642,9 +1740,9 @@ def context_list_to_string(context, sep: str = "", convert_to_string: bool = Fal
     Returns:
         str: The concatenated string of messages, separated by the specified separator.
     """
-    
+
     if not context:
-        return ''
+        return ""
 
     # If convert_to_string is True, convert each message in the context to a string and join them using the specified
     # separator.

@@ -62,7 +62,6 @@ GROUP_MAPPING = {
     "E": (False, False),
 }
 
-
 class Character(Thing):
     """
     Represents a character in the game, inheriting from the Thing class. This class manages the character's attributes,
@@ -494,14 +493,15 @@ class GenerativeAgent(Character):
         # Return the formatted string of perception descriptions, joining them with new lines.
         return context_list_to_string(perception_descriptions, sep="\n")
 
-    def get_standard_info(self, game, include_goals=True, include_perceptions=True):
+    def get_standard_info(self, game, include_goals=True, include_perceptions=True, include_impressions=False):
         """
         Generate a standard summary of the agent's current context within the game.
         This method provides information about the game world, the agent's persona, and optionally includes goals and
         perceptions.
 
         The summary includes world information, a personal summary of the agent, and, if specified, the agent's current
-        goals and perceptions.
+        goals, perceptions, and impressions.
+
         This is useful for providing the agent with relevant context for decision-making.
 
         Args:
@@ -509,7 +509,9 @@ class GenerativeAgent(Character):
             game: The current game object containing world information.
             include_goals (bool, optional): Whether to include the agent's goals in the summary. Default is True.
             include_perceptions (bool, optional): Whether to include the agent's perceptions in the summary. Default is
-            True.
+                                                  True.
+            include_impressions (bool, optional): Whether to include the agent's impressions in the summary. Default is
+                                                  True.
 
         Returns:
             str: A formatted summary string containing the agent's context.
@@ -517,20 +519,28 @@ class GenerativeAgent(Character):
 
         # Start building the summary with world information from the game
         summary = f"WORLD INFO:\n{game.world_info}"
+
         # Add the agent's personal summary to the summary
-        summary += f"\n\nYou are {self.persona.get_personal_summary()}."
+        summary += f"\n\nPERSONAL INFO:\nYou are {self.persona.get_personal_summary()}."
 
         # Check if the agent uses goals and if goals should be included in the summary
         if self.use_goals and include_goals:
+
+            # print("[CHARACTER] GET STANDARD INFO: GETTING GOALS FOR:", self.name)
+
             # Retrieve the current goals for the agent based on the current game round, appending them to the summary.
             if goals := self.get_goals(round=game.round, as_str=True):
-                summary += f"\n\nYour current GOALS:\n{goals}\n"
+                summary += f"\n\nPERSONAL GOALS:\n{goals}"
 
         # Check if perceptions should be included and if there are any last location observations
         if include_perceptions and self.last_location_observations:
             # Parse the agent's perceptions into a readable format, appending them to the summary.
             if perceptions := self._parse_perceptions():
-                summary += f"\n\nYour current perceptions are:\n{perceptions}\n"
+                summary += f"\n\nCURRENT PERCEPTIONS:\n{perceptions}"
+
+        if self.use_impressions and include_impressions:
+            if impressions := self.impressions.get_impressions(as_str=True, prefix="\n\n"):
+                summary += f"\n\nCURRENT IMPRESSIONS:{impressions}"
 
         # Return the complete summary string
         return summary
@@ -596,6 +606,8 @@ class GenerativeAgent(Character):
 
         # Check if the current game tick indicates the start of a new round and if the agent is configured to use goals
         if game.tick == 0 and self.use_goals:
+
+            # print("GENERATING GOALS (from generate_goals in Character) FOR:", self.name)
 
             # Uncomment the following line to debug and see which agent's goals are being set
             # print(f"Setting goal for {self.name}")
@@ -711,6 +723,9 @@ class GenerativeAgent(Character):
 
         # Iterate through each character that the agent can currently see
         for target in self.get_characters_in_view(game):
+
+            # print(f"{self.name} is updating impression for {target.name}...")
+
             # Update the agent's impression of the target character based on the current game context
             self.impressions.update_impression(game, target)
 

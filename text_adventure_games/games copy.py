@@ -1462,7 +1462,7 @@ class SurvivorGame(Game):
         extras["type"] = "Calls"
 
         # Create a message containing the current count of GPT calls
-        message = f"Current GPT calls count: {GptCallHandler.get_calls_count()}"
+        message = f"Current GPT calls count: {GptCallHandler.get_gpt_calls_count()}"
 
         # Log the message at the debug level, including the extras for context
         self.logger.debug(msg=message, extra=extras)

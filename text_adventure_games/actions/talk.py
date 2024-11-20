@@ -5,6 +5,19 @@ from . import preconditions as P
 from text_adventure_games.managers import Dialogue
 from collections.abc import Iterable
 
+circular_import_prints = False
+
+from typing import (
+    TYPE_CHECKING,
+    Union,
+    Set,
+)  # Allows conditional imports for type hints
+
+if TYPE_CHECKING:
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Game")
+    from text_adventure_games.games import Game
+
 
 class Talk(base.Action):
     """
@@ -33,7 +46,7 @@ class Talk(base.Action):
     ACTION_NAME = "talk to"
 
     # A brief description of what the action does.
-    ACTION_DESCRIPTION = "Start a dialogue with someone"
+    ACTION_DESCRIPTION = "Start a dialogue with someone or multiple people"
 
     # A list of alternative phrases that can also trigger the action.
     ACTION_ALIASES = [
@@ -43,18 +56,24 @@ class Talk(base.Action):
         "go talk to",
         "address",
         "start a conversation with",
+        "discuss",
     ]
 
-    def __init__(self, game, command: str, character: Character):
+    def __init__(self, game: "Game", command: str, character: Character, talking_to: Union[Set[Character], None]=None,
+                 dialogue_duration: Union[int, None]=None, max_iterations: Union[int, None]=None):
         """
         Initializes a Talk action, setting up the command and identifying the characters involved in the dialogue. This
         constructor processes the command to determine the character initiating the talk and the character being
         addressed.
 
         Args:
-            game: The game instance where the action is taking place.
+            game (Game): The game instance where the action is taking place.
             command (str): The command string that triggers the dialogue.
             character (Character): The character initiating the dialogue.
+            talking_to (Union[Set[Character], None]): The character(s) who is/are being addressed in the dialogue.
+                                                      Defaults to None.
+            dialogue_duration (Union[int, None]): The duration of the dialogue. Defaults to None.
+            max_iterations (Union[int, None]): The maximum number of iterations for the dialogue. Defaults to None.
 
         Attributes:
             command (str): The command string provided for the action.
@@ -69,11 +88,17 @@ class Talk(base.Action):
         # Store the command string provided for the action.
         self.command = command
 
+        # Store the dialogue duration provided for the action.
+        self.dialogue_duration = dialogue_duration
+
+        # Store the maximum number of iterations provided for the action.
+        self.max_iterations = max_iterations
+
         # The character parameter is currently not used; it may be utilized in future implementations.
         # self.character = character
 
         # List of keywords that indicate a dialogue action.
-        talk_words = ["talk", "chat", "dialogue", "speak"]
+        talk_words = ["talk", "chat", "dialogue", "speak", 'discuss', 'address']
 
         # Initialize variables to hold parts of the command.
         command_before_word = ""
@@ -92,11 +117,14 @@ class Talk(base.Action):
         # Set the character initiating the dialogue.
         self.starter = character
 
-        # Retrieve the character being addressed based on the command context.
-        self.talking_to = {self.parser.get_character(command_after_word, character=None)}
+        if talking_to is None:
+            # Retrieve the character(s) being addressed based on the command context.
+            self.talking_to = set(self.parser.get_character(command_after_word, character=None, allow_multiple=True))
+        else:
+            self.talking_to = set(list(talking_to))
 
         # Create a list of participants in the dialogue, including both the starter and the talking-to character.
-        self.participants = [self.starter] + [character for character in self.talking_to]
+        self.participants = {self.starter} | self.talking_to
 
     def check_preconditions(self) -> bool:
         """
@@ -133,23 +161,25 @@ class Talk(base.Action):
             return False
 
         # Verify that the talking-to character is valid and can be found.
-        if not self.was_matched(self.starter, list(self.talking_to)[0]):
-            description = f"{list(self.talking_to)[0].name} could not be found."
-            # Report the failure to the parser if the talking-to character is not found.
-            self.parser.fail(self.command, description, self.starter)
-            return False
+        for talking_to in self.talking_to:
+            if not self.was_matched(self.starter, talking_to):
+                description = f"{talking_to.name} could not be found."
+                # Report the failure to the parser if the talking-to character is not found.
+                self.parser.fail(self.command, description, self.starter)
+                return False
 
-        # Check if the talking-to character is in the same location as the starter character.
-        if not self.starter.location.here(list(self.talking_to)[0]):
-            description = (
-                f"{self.starter.name} tried to talk to {list(self.talking_to)[0].name} but {list(self.talking_to)[0].name} "
-                f"is NOT found at {self.starter.location}"
-            )
-            # Report the failure to the parser if the characters are not in the same location.
-            self.parser.fail(self.command, description, self.starter)
-            return False
-        
-        # Check if the talking-to characters are the same as the last dialogue targets.
+        # Check if the talked-to character is in the same location as the starter character.
+        for talking_to in self.talking_to:
+            if not self.starter.location.here(talking_to):
+                description = (
+                    f"{self.starter.name} tried to talk to {talking_to.name} but {talking_to.name} "
+                    f"is NOT found at {self.starter.location}"
+                )
+                # Report the failure to the parser if the characters are not in the same location.
+                self.parser.fail(self.command, description, self.starter)
+                return False
+
+        # Check if the talked-to characters are the same as the last dialogue targets.
         last_dialogue_targets = self.starter.get_last_dialogue_targets()
 
         if self.talking_to == last_dialogue_targets:
@@ -179,17 +209,22 @@ class Talk(base.Action):
             None: This method does not raise exceptions but reports the outcome of the dialogue through the parser.
         """
 
-        # Create a new Dialogue instance with the current game context, participants, and command.
-        dialogue = Dialogue(self.game, self.participants, self.command)
+        # Create a new Dialogue instance with the current game context, participants, command, and dialogue duration.
+        dialogue = Dialogue(
+            self.game,
+            self.starter,
+            self.participants,
+            self.command,
+            dialogue_duration=self.dialogue_duration,
+            max_iterations=self.max_iterations,
+        )
 
         # Start the dialogue loop, which handles the conversation and returns the dialogue history.
         dialogue_history = dialogue.dialogue_loop()
 
-        # Register the talking-to character as a dialogue participant for the starter character.
-        self.starter.set_dialogue_participants(self.talking_to)
-
-        # Register the starter character as a dialogue participant for the talking-to character.
-        list(self.talking_to)[0].set_dialogue_participants(self.starter)
+        # Register the talked-to character(s) as dialogue participants for each character.
+        for character in self.participants:
+            character.set_dialogue_participants(self.participants.difference({character}))
 
         # Report the successful execution of the command along with the dialogue history to the parser.
         self.parser.ok(self.command, dialogue_history, self.starter)

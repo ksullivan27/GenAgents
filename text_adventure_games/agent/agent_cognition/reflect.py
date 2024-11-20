@@ -131,7 +131,7 @@ class Reflect:
     # Set up the logger at the module level
     logger = logging.getLogger("agent_cognition")
 
-    memory_query_keywords_and_embeddings_list = None
+    memory_query_keywords_and_embeddings = None
 
     @classmethod
     def initialize_gpt_handler(cls):
@@ -148,14 +148,22 @@ class Reflect:
                 model_config_type="reflect", **cls.model_params
             )
 
+    # @classmethod
+    # def get_memory_query_keywords_and_embeddings(cls, game: "Game"):
+    #     if cls.memory_query_keywords_and_embeddings_list is None:
+    #         cls.memory_query_keywords_and_embeddings_list = [
+    #             Retrieve.get_query_keywords_and_embeddings(game=game, query=q)
+    #             for q in rp.memory_query_questions
+    #         ]
+
     @classmethod
     def get_memory_query_keywords_and_embeddings(cls, game: "Game"):
-        if cls.memory_query_keywords_and_embeddings_list is None:
-            cls.memory_query_keywords_and_embeddings_list = [Retrieve.get_query_keywords_and_embeddings(
-                    game=game,
-                    query=q
-                ) for q in rp.memory_query_questions
-            ]
+        if cls.memory_query_keywords_and_embeddings is None:
+            cls.memory_query_keywords_and_embeddings = (
+                Retrieve.get_query_keywords_and_embeddings(
+                    game=game, query=rp.memory_query_questions
+                )
+            )
 
     @classmethod
     def reflect(cls, game: "Game", character: "Character"):
@@ -167,7 +175,9 @@ class Reflect:
         """
         # Initialize the GPT handler if it hasn't been set up yet
         cls.initialize_gpt_handler()
-        cls.get_memory_query_keywords_and_embeddings(game)  # Get the memory query keywords and embeddings
+        cls.get_memory_query_keywords_and_embeddings(
+            game
+        )  # Get the memory query keywords and embeddings
         cls.generalize(game, character)
         # cls.reflect_on_goals(game, character)
         # cls.reflect_on_relationships(game, character)
@@ -192,8 +202,9 @@ class Reflect:
         # Construct the system prompt
         system_prompt = (
             character.get_standard_info(
-                game, include_goals=True, include_perceptions=False
+                game, include_goals=True, include_perceptions=True
             )
+            + "\n\nCURRENT TASK:\n"
             + rp.gpt_generalize_prompt
         )
 
@@ -202,36 +213,59 @@ class Reflect:
             content=system_prompt, role="system", pad_reply=False
         )
 
-        # Initialize token count and impressions list
-        impressions_token_count = 0
-        impressions = []
-
-        # If the character uses impressions, retrieve them from other characters
-        if character.use_impressions:
-            impressions = character.impressions.get_multiple_impressions(
-                game.characters.values()
-            )
-            impressions_token_count = get_prompt_token_count(
-                content=impressions, role="user", pad_reply=True
-            )
-
-        # Initialize a list to hold relevant memories
-        relevant_memories = []
+        # print("-" * 100)
+        # print(character.name, "BEGINS REFLECTION GENERALIZATION")
+        # print("OBSERVATIONS (reflect)")
+        # for obs in character.memory.observations:
+        #     print("-", obs.node_id, obs.node_type, obs.node_round, obs.node_description)
 
         # Retrieve relevant memories based on predefined query questions
-        for question in cls.memory_query_keywords_and_embeddings_list:
-            memories = Retrieve.retrieve(
-                game=game,
-                character=character,
-                query=question,
-                n=memories_per_retrieval,
-                include_idx=True,
-            )
-            relevant_memories.extend(memories)
+        relevant_memories = Retrieve.retrieve(
+            game=game,
+            character=character,
+            query=cls.memory_query_keywords_and_embeddings,
+            n=memories_per_retrieval,
+            # memory_lookback=-1,
+            # round=game.round,
+            include_idx=True,
+            prepend="\n- ",
+            memory_types=[
+                MemoryType.ACTION,
+                MemoryType.DIALOGUE,
+                # MemoryType.REFLECTION,
+                MemoryType.PERCEPT,
+            ],
+        )
+        
+        # print("RELEVANT MEMORIES (reflect)", relevant_memories)
 
-        # Remove duplicates from the relevant memories and sort them by length
-        relevant_memories = list(set(relevant_memories))
-        relevant_memories.sort(key=len)
+        # Retrieve all reflections from the previous three rounds
+        memories = Retrieve.retrieve(
+            game=game,
+            character=character,
+            query=cls.memory_query_keywords_and_embeddings,
+            n=memories_per_retrieval,
+            memory_lookback=-1,
+            round=game.round - 3,
+            include_idx=True,
+            prepend="\n- ",
+            memory_types=[
+                MemoryType.REFLECTION,
+            ],
+        )
+        
+        # print("MEMORIES (reflect)", memories)
+
+        # Create a set of memories for quick lookup
+        memories_set = set(memories)
+
+        # Filter relevant_memories to remove any duplicates found in memories
+        relevant_memories = [mem for mem in relevant_memories if mem not in memories_set]
+
+        # Extend relevant_memories with memories, preserving order
+        relevant_memories.extend(memories)
+
+        # print("RELEVANT MEMORIES (reflect)", relevant_memories)
 
         # Calculate the token count for the relevant memories
         relevant_memories_token_count = get_prompt_token_count(
@@ -240,9 +274,10 @@ class Reflect:
 
         # Prepare a primer for relevant reflections and memories
         relevant_memories_primer = [
-            "\nRelevant Reflections:\n",
-            "\nRelevant Memories:\n",
-            "None\n",
+            "\n\nRelevant Reflections:",
+            "\n\nRelevant Memories:",
+            "\nNone\n",
+            "\nNone\n",
         ]
 
         # Calculate the token count for the relevant memories primer
@@ -262,13 +297,17 @@ class Reflect:
             cls.gpt_handler.model_context_limit,
             cls.gpt_handler.max_output_tokens,
             system_prompt_token_count,
-            impressions_token_count,
             rel_mem_primer_token_count,
             insight_q_token_count,
         )
 
+        # print("RELEVANT MEMORIES TOKEN COUNT (reflect)", relevant_memories_token_count)
+        # print("RELEVANT MEMORIES COUNT (reflect)", len(relevant_memories))
+        # print("RELEVANT MEMORIES ID'S (reflect)", [mem.split(".", 1)[0].replace("-", "").strip() for mem in relevant_memories])
+
         # Process relevant memories while there are still tokens available
         while relevant_memories_token_count > 0:
+
             # Limit the relevant memories to fit within the available token count
             relevant_memories_limited = limit_context_length(
                 relevant_memories,
@@ -277,6 +316,19 @@ class Reflect:
                 keep_most_recent=False,
             )
 
+            # FOR DEBUGGING (DELETE)
+            relevant_memories_limited_token_count = get_prompt_token_count(
+                content=relevant_memories_limited, role=None, pad_reply=False
+            )
+
+            # print("LIMITED RELEVANT MEMORIES TOKEN COUNT (reflect)", relevant_memories_limited_token_count)
+            # print("LIMITED RELEVANT MEMORIES COUNT (reflect)", len(relevant_memories_limited))
+            # print("LIMITED RELEVANT MEMORIES ID'S (reflect)", [mem.split(".", 1)[0].replace("-", "").strip() for mem in relevant_memories_limited])
+
+            # print("REFLECT MEMORIES LIMITED")
+            # for mem in relevant_memories_limited:
+            #     print(mem)
+
             # Break the loop if there are no memories to process
             if not relevant_memories_limited:
                 break
@@ -284,31 +336,52 @@ class Reflect:
             # Categorize memories into reflections and observations
             categorized_memories = {"reflections": [], "observations": []}
             for full_memory in relevant_memories_limited:
+                # print("\nFULL MEMORY", full_memory)
                 idx, memory_desc = full_memory.split(".", 1)
-                idx = int(idx)
+                idx = int(
+                    idx.replace("-", "").strip()
+                )  # Adding and removing for accurate token counts
                 memory_desc = memory_desc.strip()
+                # print("IDX", idx)
+                # print("MEMORY DESC", memory_desc)
                 memory_type = character.memory.get_observation_type(idx)
+                # print("MEMORY TYPE", memory_type, memory_type == MemoryType.REFLECTION, memory_type.value == MemoryType.REFLECTION.value)
                 key = (
                     "reflections"
                     if memory_type.value == MemoryType.REFLECTION.value
                     else "observations"
                 )
+                # print("KEY", key)
+
+                # Prepend the memory description with a tab and dash for better formatting
+                memory_desc = "\n- " + memory_desc
+
                 categorized_memories[key].append(
-                    full_memory if key == "reflections" else memory_desc
+                    full_memory  # if key == "reflections" else memory_desc
                 )
 
             # Use the relevant memories primer if no reflections or observations are found
             reflections_lmtd = categorized_memories["reflections"] or [
                 relevant_memories_primer[2]
             ]
+
+            # print("REFLECTIONS LIMITED")
+            # for ref in reflections_lmtd:
+            #     print("-", ref)
+
             observations_lmtd = categorized_memories["observations"] or [
-                relevant_memories_primer[2]
+                relevant_memories_primer[3]
             ]
+
+            # # Remove the leading newline from the first element of the lists
+            # if reflections_lmtd:
+            #     reflections_lmtd[0] = reflections_lmtd[0].strip()
+            # if observations_lmtd:
+            #     observations_lmtd[0] = observations_lmtd[0].strip()
 
             # Construct the user prompt by combining impressions, memories, and insight questions
             user_prompt_list = (
-                impressions
-                + [relevant_memories_primer[0]]
+                [relevant_memories_primer[0]]
                 + reflections_lmtd
                 + [relevant_memories_primer[1]]
                 + observations_lmtd
@@ -318,12 +391,19 @@ class Reflect:
             # Join the user prompt list into a single string
             user_prompt_str = "".join(user_prompt_list)
 
+            # print("~" * 100)
+            # print("USER PROMPT (reflect):\n", user_prompt_str)
+            # print("~" * 100)
+
             success = False
             # Attempt to generate a response from the GPT model
             while not success:
                 try:
                     response = cls.gpt_handler.generate(
-                        system=system_prompt, user=user_prompt_str, character=character, game=game
+                        system=system_prompt,
+                        user=user_prompt_str,
+                        character=character,
+                        game=game,
                     )
                     # Parse the response as JSON to extract new generalizations
                     new_generalizations = json.loads(response)
@@ -341,10 +421,18 @@ class Reflect:
             relevant_memories = list(
                 OrderedSet(relevant_memories) - OrderedSet(relevant_memories_limited)
             )
+
             # Recalculate the token count for the remaining relevant memories
             relevant_memories_token_count = get_prompt_token_count(
                 content=relevant_memories, role=None, pad_reply=False
             )
+
+            # print("RELEVANT MEMORIES (after)", OrderedSet(relevant_memories))
+            # print("RELEVANT MEMORIES TOKEN COUNT (after)", relevant_memories_token_count)
+            # print("RELEVANT MEMORIES COUNT (after)", len(relevant_memories))
+            # print("RELEVANT MEMORIES ID'S (after)", [mem.node_id for mem in relevant_memories])
+
+            # print("-" * 100)
 
     @classmethod
     def add_generalizations_to_memory(
@@ -530,6 +618,7 @@ class Reflect:
                             node_importance=ref_importance,
                             node_keywords=ref_kwds,
                         )
+
                         # Update the embedding of the memory node with the new description
                         _ = character.memory.update_node_embedding(
                             node_id=prev_idx, new_description=statement

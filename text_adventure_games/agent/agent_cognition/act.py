@@ -174,7 +174,10 @@ class Act:
 
         # Generate a response from the GPT handler using the provided system and user prompts.
         response = self.gpt_handler.generate(
-            system=system_prompt, user=user_prompt, character=self.character, game=self.game
+            system=system_prompt,
+            user=user_prompt,
+            character=self.character,
+            game=self.game
         )
 
         # Check if the response is a tuple, indicating a potential error related to token limits.
@@ -233,8 +236,8 @@ class Act:
         system += self.character.get_standard_info(self.game)
 
         # Add predefined system message segments to provide context for actions.
-        system += ap.action_system_mid
-        system += ap.action_system_end
+        system += "\n" + ap.action_system_mid
+        system += " " + ap.action_system_end
 
         # Retrieve the available game actions from the game parser.
         game_actions = self.game.parser.actions
@@ -243,7 +246,7 @@ class Act:
         choices_str, _ = enumerate_dict_options(
             game_actions, names_only=True, inverted=True, enumerate_results=False
         )
-        system += choices_str
+        system += "\n\n" + choices_str.strip().replace("\n", "\n\t- ")
 
         # Calculate the token count for the constructed system message to manage token limits.
         sys_token_count = get_prompt_token_count(
@@ -278,7 +281,7 @@ class Act:
 
         # Prepare a list of always included information for the user message.
         always_included = [
-            "These are select memories in order from least to most relevant:\n",
+            "\n\nThese are select memories in order from least to most relevant:\n",
             f"In this location, you see: {', '.join([c.name for c in chars_in_view])}\n",
             ap.action_incentivize_exploration,
             goal_reminder,

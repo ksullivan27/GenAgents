@@ -12,6 +12,7 @@ from text_adventure_games import games, things
 from text_adventure_games.agent.persona import (
     Persona,
 )  # Import Persona class for character personas
+from text_adventure_games.agent.agent_cognition.reflect import Reflect
 from text_adventure_games.assets.prompts import (
     world_info_prompt,
 )  # Import world info prompt
@@ -28,6 +29,7 @@ from text_adventure_games.utils.build_agent import (
 from text_adventure_games.utils.general import (
     get_logger_extras,
 )  # Function to get logger extras
+from text_adventure_games.actions import talk
 
 # Mapping of groups to boolean values indicating certain properties
 GROUP_MAPPING = {
@@ -483,8 +485,13 @@ class BoardroomGame(games.SurvivorGame):
             experiment_id=experiment_id,
         )  # Identifier for the experiment.
 
+        self.meeting_name = "Apple Inc. Q2 2025 Board Meeting"
+        self.topic = (
+            "Strategic Planning for the Next Quarter and Review of Q1 2025 Results"
+        )
+
     @override
-    def update_world_info(self):
+    def update_world_info(self, character=None):
         """
         Updates the world information for the boardroom game.
 
@@ -496,25 +503,282 @@ class BoardroomGame(games.SurvivorGame):
             None
         """
 
+        characters_list = [
+            c.name for c in self.characters.values() if c.id != character.id
+        ]
+        if len(characters_list) == 2:
+            formatted_characters = " and ".join(characters_list)
+        elif len(characters_list) > 2:
+            formatted_characters = (
+                ", ".join(characters_list[:-1]) + ", and " + characters_list[-1]
+            )
+        else:
+            formatted_characters = ""
+
         params = {
             "meeting_name": self.meeting_name,
             "topic": self.topic,
-            "characters": ", ".join(
-                [
-                    f"{c.name}"
-                    for c in self.characters.values()
-                    if (c.id != self.player.id)
-                ]
-            ),
-            "minutes_left": 90,  #TODO: calculate minutes remaining from generated words (using 200 tokens per minute)
+            "characters": formatted_characters,
         }
         self.world_info = world_info_prompt.boardroom_world_info.format(**params)
 
+    def update_impressions(self) -> None:
+        """
+        Update the impressions of the characters.
+
+        This method iterates through all characters in the game and updates their impressions based on the current
+        game state.
+
+        Returns:
+            None
+        """
+        for character in self.characters.values():
+            # print("+" * 100)
+            # print("UPDATING IMPRESSIONS FOR:", character.name)
+
+            self.update_world_info(character=character)
+
+            character.update_character_impressions(self)
+
+            # for obs in character.memory.observations:
+            #     if obs.node_type.value == 6:
+            #         print(
+            #             "-",
+            #             obs.node_id,
+            #             obs.node_round,
+            #             obs.node_type,
+            #             obs.node_description,
+            #         )
+            # print("DONE UPDATING IMPRESSIONS FOR:", character.name)
+            # print("CURRENT IMPRESSIONS:")
+            # print(character.impressions.impressions.items())
+            # print("+" * 100)
+
+    def update_goals(self) -> None:
+        """
+        Update the goals of the characters.
+
+        This method iterates through all characters in the game and generates new goals for each character based
+        on the current game state.
+
+        Returns:
+            None
+        """
+        for character in self.characters.values():
+            # print("+" * 100)
+            # print("GENERATING GOALS FOR:", character.name)
+
+            self.update_world_info(character=character)
+
+            character.generate_goals(self)
+
+            # for obs in character.memory.observations:
+            #     if obs.node_type.value == 5:
+            #         print(
+            #             "-",
+            #             obs.node_id,
+            #             obs.node_round,
+            #             obs.node_type,
+            #             obs.node_description,
+            #         )
+
+            # print("DONE GENERATING GOALS FOR:", character.name)
+            # print("CURRENT GOALS:")
+            # print(character.goals.goals.items())
+            # print("+" * 100)
+
+    def evaluate_goals(self) -> None:
+        """
+        Evaluate the goals of the characters.
+
+        This method iterates through all characters in the game and evaluates their goals based on the current game state.
+
+        Returns:
+            None
+        """
+        for character in self.characters.values():
+            # print("+" * 100)
+            # print("EVALUATING GOALS FOR:", character.name)
+
+            self.update_world_info(character=character)
+
+            character.goals.evaluate_goals(self)
+
+            # for obs in character.memory.observations:
+            #     if obs.node_type.value == 5:
+            #         print(
+            #             "-",
+            #             obs.node_id,
+            #             obs.node_round,
+            #             obs.node_type,
+            #             obs.node_description,
+            #         )
+
+            # print("DONE EVALUATING GOALS FOR:", character.name)
+            # print("+" * 100)
+
+    def update_reflections(self) -> None:
+        """
+        Update the reflections of the characters.
+
+        This method iterates through all characters in the game and forces each character to reflect on the
+        current game state.
+
+        Returns:
+            None
+        """
+        for character in self.characters.values():
+            # print("+" * 100)
+            # print("REFLECTING FOR:", character.name)
+
+            self.update_world_info(character=character)
+
+            Reflect.reflect(self, character)
+
+            # for obs in character.memory.observations:
+            #     if obs.node_type.value == 3:
+            #         print(
+            #             "-",
+            #             obs.node_id,
+            #             obs.node_round,
+            #             obs.node_type,
+            #             obs.node_description,
+            #         )
+
+            # print("DONE REFLECTING FOR:", character.name)
+            # print("+" * 100)
+
+    def update_perceptions(self) -> None:
+        """
+        Update the perceptions of the characters.
+
+        This method iterates through all characters in the game and allows each character to perceive their
+        surroundings based on the current game state.
+
+        Returns:
+            None
+        """
+        for character in self.characters.values():
+
+            # print("+" * 100)
+            # print("PERCEPTING FOR:", character.name)
+
+            self.update_world_info(character=character)
+
+            character.perceive(self)
+
+            # for obs in character.memory.observations:
+            #     if obs.node_type.value == 4:
+            #         print(
+            #             "-",
+            #             obs.node_id,
+            #             obs.node_round,
+            #             obs.node_type,
+            #             obs.node_description,
+            #         )
+
+            # print("DONE PERCEPTING FOR:", character.name)
+            # print("+" * 100)
+
+    def update_cognitive_functions(
+        self,
+        update_round: bool = True,
+        update_impressions: bool = True,
+        evaluate_goals: bool = True,
+        update_reflections: bool = True,
+        update_perceptions: bool = True,
+        update_goals: bool = True,
+    ) -> None:
+        """
+        Update the cognitive functions of the characters.
+
+        This method calls the update methods for impressions, goals, reflections, and perceptions in sequence,
+        based on the parameters provided. Each component can be selectively updated.
+
+        Args:
+            update_round (bool): If True, update the round and ticks of the game. Defaults to True.
+            update_impressions (bool): If True, update the impressions of the characters. Defaults to True.
+            evaluate_goals (bool): If True, evaluate the goals of the characters. Defaults to True.
+            update_reflections (bool): If True, update the reflections of the characters. Defaults to True.
+            update_perceptions (bool): If True, update the perceptions of the characters. Defaults to True.
+            update_goals (bool): If True, update the goals of the characters. Defaults to True.
+
+        Returns:
+            None
+        """
+
+        # print("~ INITIALIZING IMPRESSIONS UPDATE ~")
+        if update_impressions:
+            self.update_impressions()
+
+        if update_reflections:
+            self.update_reflections()
+
+        if evaluate_goals:
+            self.evaluate_goals()
+
+        if update_round:
+            self.round += 1
+            self.tick = 0
+
+        if update_goals:
+            self.update_goals()
+
     @override
     def game_loop(self):
-        print("NEED TO IMPLEMENT GAME LOOP")
-        return
-        # pass  #TODO: implement this
+        # Set goals for all characters at the beginning of the round
+
+        from text_adventure_games.agent.memory_stream import MemoryType
+
+        self.update_cognitive_functions(
+            update_round=False,
+            update_impressions=False,
+            evaluate_goals=False,
+            update_reflections=False,
+            update_perceptions=False,
+            update_goals=True,
+        )
+
+        # self.update_cognitive_functions(
+        #     update_round=False,
+        #     update_impressions=True,
+        #     evaluate_goals=False,
+        #     update_reflections=False,
+        #     update_perceptions=False,
+        #     update_goals=False,
+        # )
+
+        # print("PLAYER MEMORY:")
+        # for observation in self.player.memory.observations:
+        #     print(
+        #         observation.node_id,
+        #         observation.node_type,
+        #         observation.node_description,
+        #         observation.node_keywords,
+        #         observation.node_importance,
+        #     )
+
+        # print("ATTEMPT 1", self.player.memory.get_observations_by_type(MemoryType.GOAL))
+        # print("ATTEMPT 2", self.player.memory.get_observations_by_type(5))
+        # print("ATTEMPT 3", self.player.memory.get_observations_by_type(MemoryType.GOAL.value))
+
+        # Reset the dialogue state for all characters
+        self.reset_character_dialogue()
+
+        print("~ TALKING ~")
+        talk_action = talk.Talk(
+            self,
+            "Discuss the strategic plan for the next quarter and review of Q1 2025 results.",
+            self.player,
+            talking_to=set(self.characters.values()).difference({self.player}),
+            dialogue_duration=10,
+            max_iterations=None,
+        )
+        talk_action()
+        print("~ DONE TALKING ~")
+
+        # Save the game results so far for later analysis
+        self.save_end_game_data()
 
 
 def build_exploration(
@@ -854,7 +1118,7 @@ def build_boardroom(
     location_assignments = [locs.get("boardroom")] * num_characters
 
     # Assign all characters to group D.
-    group_assignments = ['D' for _ in range(num_characters)]
+    group_assignments = ["D" for _ in range(num_characters)]
     # Set the starting location for the game.
     start_at = location_assignments[0]
 
@@ -945,9 +1209,7 @@ def collect_game_characters(personas_path, partition: List[str] = None):
         for filename in os.listdir(personas_path):
             # Check if the file has a .json extension.
             if filename.endswith(".json"):
-                print(
-                    "Adding character file: ", filename
-                )
+                print("Adding character file: ", filename)
                 # Construct the full path to the character file.
                 character_path = os.path.join(personas_path, filename)
                 # If partitions are specified, categorize the character files accordingly.
@@ -1298,12 +1560,8 @@ def build_mini_discovery(
     clue.set_property("clue_content", clue1_message)
 
     # Set properties for the cliffs location.
-    cliffs.set_property(
-        "has_idol", True
-    )
-    cliffs.set_property(
-        "tool_required", True
-    )
+    cliffs.set_property("has_idol", True)
+    cliffs.set_property("tool_required", True)
     cliffs_message = "but the rocks are too slippery and it becomes impossible without the right tool (a sturdy stick!)."
     cliffs.set_property(
         "search_fail", cliffs_message
