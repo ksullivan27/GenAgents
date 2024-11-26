@@ -188,11 +188,11 @@ class Retrieve:
             str]): An optional search query to determine relevance. If not provided, default queries are used. Defaults
             to None.
             sort_nodes (Literal["chronological", "reverse chronological", "importance", "reverse importance"],
-                          optional): Whether to sort the nodes by recency, reverse chronological, importance, or
-                          reverse importance. Defaults to "importance".
+                          optional): Whether to sort the nodes by recency (chronological) or importance. Defaults to
+                          "importance".
             n (int, optional): The maximum number of memory nodes to return. Defaults to -1, which returns all.
             threshold (float, optional): The cosine similarity threshold to consider a keyword as a match (default is
-                                         0.9).
+                                         0.45).
             percentile (float, optional): The percentile threshold for filtering memory scores. Defaults to 0.75.
             memory_lookback (int | None, optional): The number of memories to look back across. Defaults to None, which
                                                     utilizes the character's memory lookback value. Setting this
@@ -201,7 +201,7 @@ class Retrieve:
                                           specified round.
             method (str, optional): The method to use for aggregation ('mean' or 'median'). Defaults to 'mean'.
             include_descriptions (bool, optional): If True, includes the descriptions of the memory nodes in the output.
-                                                  Defaults to True.
+                                                   Defaults to True.
             include_idx (bool, optional): If True, includes the index of each memory node in the output. Defaults to
                                           False.
             include_scores (bool, optional): If True, includes the scores in the output. Defaults to False.
@@ -223,45 +223,6 @@ class Retrieve:
         if not include_descriptions:
             max_tokens = None
             prepend = ""
-
-        # print(f"\n\nRetrieve.retrieve() called with query: {query}")
-
-        # print("-\tQuery is a dictionary:", isinstance(query, dict))
-        # print("-\t'embeddings' in query:", "embeddings" in query)
-        # print("-\t'embeddings' is a dictionary:", isinstance(query["embeddings"], dict))
-        # print(
-        #     "-\tAll values of 'embeddings' are tuples:",
-        #     all(isinstance(value, tuple) for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tAll values of 'embeddings' have length 2:",
-        #     all(len(value) == 2 for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' are tuples:",
-        #     all(isinstance(value[0], tuple) for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' have length 2:",
-        #     all(len(value[0]) == 2 for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' have float as first element:",
-        #     all(
-        #         isinstance(value[0][0], float) for value in query["embeddings"].values()
-        #     ),
-        # )
-        # print(
-        #     "-\tFirst element of all values of 'embeddings' have int as second element:",
-        #     all(isinstance(value[0][1], int) for value in query["embeddings"].values()),
-        # )
-        # print(
-        #     "-\tSecond element of all values of 'embeddings' are np.ndarrays:",
-        #     all(
-        #         isinstance(value[1], np.ndarray)
-        #         for value in query["embeddings"].values()
-        #     ),
-        # )
 
         # Check if the query is weighted; it must correctly include weights for each embedding
         if weighted and not (
@@ -472,10 +433,8 @@ class Retrieve:
         if sort_nodes == "importance":  # Ascending importance
             memory_scores = sorted(memory_scores, key=lambda x: x[0], reverse=False)
             # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
-            # print("MEMORIES (RETRIEVE)", type(memory_scores), len(memory_scores), memory_scores)
             if n > 0:
                 memory_scores = memory_scores[-n:]
-                # print("LIMITED MEMORIES (RETRIEVE)", type(memory_scores), len(memory_scores), memory_scores)
         elif sort_nodes == "reverse importance":  # Descending importance
             memory_scores = sorted(memory_scores, key=lambda x: x[0], reverse=True)
             # If a positive integer is specified and sorting is enabled, limit the number of returned memory nodes
@@ -547,11 +506,6 @@ class Retrieve:
             List[tuple[float, int]]: A list of tuples containing total scores and their corresponding node IDs.
         """
 
-        # print("WEIGHTED", weighted)
-        # print("SEPARATE SCORES", separate_scores)
-        # print("STANDARDIZE", standardize)
-        # print("QUERY", query)
-
         # Calculate the recency score for each memory node based on the character's memory
         recency = Retrieve._calculate_node_recency(
             character=character,
@@ -601,10 +555,6 @@ class Retrieve:
         ):
             # Sum the relevance scores across the rows to get a single score for each memory node
             relevance = np.sum(relevance, axis=1)
-
-        # print(f"Recency: {type(recency)}, {recency}")
-        # print(f"Importance: {type(importance)}, {importance}")
-        # print(f"Relevance: {type(relevance)}, {relevance}")
 
         # Calculate the total score by summing the scaled scores
         total_score = recency + importance + relevance
@@ -778,12 +728,6 @@ class Retrieve:
             default_embeddings = character.memory.get_query_embeddings()
             relevances = cosine_similarity(memory_embeddings, default_embeddings)
 
-        # # Standardize the scored_relevances
-        # if standardize:
-        #     scored_relevances = (
-        #         scored_relevances - np.mean(scored_relevances)
-        #     ) / np.std(scored_relevances)
-
         if weighted:
             # Get the weights for each query embedding
             weights = [
@@ -799,10 +743,6 @@ class Retrieve:
                 for embedding in query["embeddings"].values()
             ]
 
-            # # Standardize weights
-            # if standardize:
-            #     weights = (weights - np.mean(weights, axis=0)) / np.std(weights, axis=0)
-
             # Take a weighted average of the recency and importance weights for each query embedding
             recency_scaler = 0.5
             importance_scaler = 0.5
@@ -811,16 +751,6 @@ class Retrieve:
                 (recency_scaler * weight[0], importance_scaler * weight[1])
                 for weight in weights
             ]
-
-            # # Standardize weights after averaging
-            # if standardize:
-            #     weights = (weights - np.mean(weights)) / np.std(weights)
-
-            # # Weight the relevance scores by the supplied query embedding importance scores
-            # scored_relevances = [
-            #     (scored_relevance * weight[0], scored_relevance * weight[1])
-            #     for scored_relevance, weight in zip(scored_relevances, weights)
-            # ]
 
         # Get aggregated relevance scores across all queries
         scored_relevances = Retrieve._score_cos_sim(
@@ -860,7 +790,7 @@ class Retrieve:
             search_keys (dict[str, np.ndarray]): A dictionary where keys are keywords and values are their embeddings.
             character (Character): The character whose memory is being queried for relevant node IDs.
             memory_types (list[MemoryType]): A list of memory types to consider during retrieval.
-            threshold (float): The cosine similarity threshold to consider a keyword as a match (default is 0.5).
+            threshold (float): The cosine similarity threshold to consider a keyword as a match (default is 0.45).
             get_all (bool): If True, returns all node IDs. Defaults to False.
 
         Returns:
@@ -945,7 +875,6 @@ class Retrieve:
                                 else [memory_types]
                             )
                         ]
-                        # memory_ids.extend(valid_node_ids)
                         print(
                             f"Memory IDs: {[character.memory.get_observation(node_id) for node_id in valid_node_ids]}"
                         )
@@ -1001,6 +930,8 @@ class Retrieve:
             query (Union[dict[str, Union[dict[str, Tuple[Union[int, Tuple[float, int]], np.ndarray]],
             dict[str, dict[str, np.ndarray]]]], dict[str, Union[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]],
             list[str], str]): An optional search query to determine relevance. If not provided, default queries are used.
+            memory_lookback (int | None): The number of memories to look back across. Defaults to None, which utilizes
+                                          the character's memory lookback value.
 
         Returns:
             dict[str, np.ndarray]: A dictionary of keywords mapping to their embeddings.
@@ -1313,7 +1244,7 @@ class Retrieve:
         standardize: bool = False,
         minmax_scale: bool = False,
         weighted: bool = False
-    ):
+    ) -> dict:
         """
         Retrieve relevant memory nodes for a given character based on a query.
         This function gathers keywords, gets all memories associated with them, ranking these memory nodes and returning a
