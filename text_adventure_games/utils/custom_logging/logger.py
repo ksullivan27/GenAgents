@@ -1,9 +1,13 @@
-print("Importing Logger")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Logger")
 
 import logging
 
 # local imports
-print(f"{__name__} calling imports for Logging Setup")
+if circular_import_prints:
+    print(f"{__name__} calling imports for Logging Setup")
 from .logging_setup import setup_logger
 
 

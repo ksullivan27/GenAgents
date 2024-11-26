@@ -5,19 +5,20 @@ action_system_mid = (
 )
 
 action_system_end = (
-    """Using the information provided, generate a short action statement in the present tense from your perspective. """
-    """Examples could be:\nGo outside to the garden.\n"""
-    """\"Talk to Tom about his strategy\"\n"""
-    """\"Pick up the stone from the ground\"\n"""
-    """\"Give your food to the guard\"\n"""
-    """\"Climb up the tree\"\n\n"""
-    """Notes to keep in mind:\n"""
-    """You can only use items that are in your possession. """
-    """If you want to go somewhere, state the direction or the location in which you want to travel. """
-    """Actions should be atomic, not general, and should interact with your immediate environment. """
-    """Be sure to mention any characters you wish to interact with by name. """
-    """Aim to keep action statements to 10 words or less. """
-    """Here is list of valid action verbs to use:\n"""
+    "Using the information provided, generate a short action statement in the present tense from your perspective.\n\n"
+    "Examples could be:\n"
+    "\t- \"Go outside to the garden.\"\n"
+    "\t- \"Talk to Tom and Joe about their strategy\"\n"
+    "\t- \"Pick up the stone from the ground\"\n"
+    "\t- \"Give your food to the guard\"\n"
+    "\t- \"Climb up the tree\"\n\n"
+    "Notes to keep in mind:\n"
+    "\t- You can only use items that are in your possession.\n"
+    "\t- If you want to go somewhere, state the direction or the location in which you want to travel.\n"
+    "\t- Actions should be atomic, not general, and should interact with your immediate environment.\n"
+    "\t- Be sure to mention any characters you wish to interact with by name.\n"
+    "\t- Aim to keep action statements to 10 words or less.\n"
+    "\t- Here is list of valid action verbs to use:\n"
 )
 
 action_incentivize_exploration = (

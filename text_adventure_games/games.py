@@ -1,4 +1,7 @@
-print("Importing Game")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Game")
 
 import json
 import inspect
@@ -9,29 +12,37 @@ from numpy.random import permutation
 import dill as pickle
 import concurrent.futures
 
-print(f"\t{__name__} calling imports for MemoryType")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for MemoryType")
 from .agent.memory_stream import MemoryType
 
-print(f"\t{__name__} calling imports for Location and Character")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Location and Character")
 from .things import Location, Character
 
-print(f"\t{__name__} calling imports for Parsing, Actions, and Blocks")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Parsing, Actions, and Blocks")
 from . import parsing, actions, blocks
 
-print(f"\t{__name__} calling imports for Logger")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Logger")
 from .utils.custom_logging import logger
 
-print(f"\t{__name__} calling imports for VotingSession and JuryVotingSession")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for VotingSession and JuryVotingSession")
 from .agent.agent_cognition.vote import VotingSession, JuryVotingSession
 from .assets.prompts import vote_prompt, world_info_prompt
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from .utils.consts import get_output_logs_path
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from .utils.general import create_dirs, get_logger_extras
 
-print(f"\t{__name__} calling imports for GptCallHandler")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptCallHandler")
 from .gpt.gpt_helpers import GptCallHandler
 
 
@@ -70,7 +81,8 @@ class Game:
             None
         """
 
-        print(f"-\tInitializing Game")
+        if circular_import_prints:
+            print(f"-\tInitializing Game")
 
         self.start_at = start_at
         self.player = player
@@ -1062,17 +1074,29 @@ class SurvivorGame(Game):
             logfile_prefix="sim",
             overwrite=False,
         )
-        print("GAME LOGGER:", game_logger)
+        # print("GAME LOGGER:", game_logger)
+
         gpt_call_logger = logger.CustomLogger(
             name="gpt_call_logger",
             experiment_name=game_logger.get_experiment_name(),
             simulation_id=game_logger.get_simulation_id(),
-            logfile_prefix="gpt_calls",
+            logfile_prefix="gpt_call",
             overwrite=True,
         )
-        print("GPT CALL LOGGER:", gpt_call_logger)
+        # print("GPT CALL LOGGER:", gpt_call_logger)
+
+        # dialogue_logger = logger.CustomLogger(
+        #     name="dialogue_logger",
+        #     experiment_name=game_logger.get_experiment_name(),
+        #     simulation_id=game_logger.get_simulation_id(),
+        #     logfile_prefix="dialogue",
+        #     overwrite=True,
+        # )
+        # # print("DIALOGUE LOGGER:", dialogue_logger)
+
         self.logger = game_logger.get_logger()
         self.gpt_call_logger = gpt_call_logger.get_logger()
+        # self.dialogue_logger = dialogue_logger.get_logger()
         self.experiment_name = experiment_name  # Store the experiment name
         self.experiment_id = game_logger.get_simulation_id()  # Store the simulation ID
 
@@ -1153,11 +1177,11 @@ class SurvivorGame(Game):
                 self.tick = tick  # Update the current tick
 
                 # Print the current round and tick for confirmation
-                print(f"ROUND: {self.round}.{self.tick}")
+                print(f"\nROUND: {self.round}.{self.tick}")
 
                 # Uncomment the following lines to handle voting sessions at the end of the round
-                # if self.tick == (self.max_ticks_per_round - 1):
-                #     self.handle_voting_sessions()
+                if self.tick == (self.max_ticks_per_round - 1):
+                    self.handle_voting_sessions()
 
                 # Set goals for all characters at the beginning of the round
                 self.goal_setting_handler()
@@ -1167,7 +1191,7 @@ class SurvivorGame(Game):
 
                 # Iterate through characters in a random order for their turns
                 for character in permutation(list(self.characters.values())):
-                    print(f"It is: {character.name}'s turn")
+                    print(f"\n{'-'*25} It is: {character.name}'s turn {'-'*25}")
                     self.turn_handler(character)  # Handle the character's turn
 
                     # Check if the game has ended after the character's action
@@ -1215,7 +1239,7 @@ class SurvivorGame(Game):
         """
 
         for c in self.characters.values():
-            c.set_dialogue_participant(talked_to=None)
+            c.set_dialogue_participants(talked_to=None)
 
     def goal_setting_handler(self):
         """
@@ -1294,8 +1318,8 @@ class SurvivorGame(Game):
         if self.winner_declared:
             print(
                 (
-                    f"""Congratulations!! {self.winner.name} won the game! """
-                    """They're the ultimate Survivor. Jeff is so proud of u!"""
+                    f"\nCongratulations!! {self.winner.name} won the game! "
+                    "They're the ultimate Survivor. Jeff is so proud of u!"
                 )
             )
             return True
@@ -1426,7 +1450,7 @@ class SurvivorGame(Game):
         self._log_exiled_player(exiled)
 
         # Print a message indicating that the character has been exiled and is now part of the jury
-        print(f"{exiled.name} was exiled from the group and now sits on the jury.")
+        print(f"\n{exiled.name} was exiled from the group and now sits on the jury.")
 
     def _log_exiled_player(self, exiled):
         """
@@ -1468,7 +1492,7 @@ class SurvivorGame(Game):
         extras["type"] = "Calls"
 
         # Create a message containing the current count of GPT calls
-        message = f"Current GPT calls count: {GptCallHandler.get_calls_count()}"
+        message = f"Current GPT calls count: {GptCallHandler.get_gpt_calls_count()}"
 
         # Log the message at the debug level, including the extras for context
         self.logger.debug(msg=message, extra=extras)
@@ -1823,30 +1847,6 @@ class SurvivorGame(Game):
                 self.voting_history, f, indent=4
             )  # Write the voting history with indentation for readability
 
-        # Construct the file path for saving character goals in JSON format
-        fp = os.path.join(
-            output_path,
-            experiment_dir,
-            f"character_goals_{self.experiment_name}-{self.experiment_id}.json",
-        )
-
-        # Create necessary directories for the file path
-        create_dirs(fp)
-
-        # Save the goals of each character to the specified JSON file
-        with open(fp, mode="w") as f:
-            # Create a dictionary of character names and their goals, defaulting to "None" if no goals exist
-            output = {
-                name: c.get_goals() or "None" for name, c in self.characters.items()
-            }
-
-            # Add goals for jury members to the output dictionary
-            for name, c in self.jury.items():
-                output[name] = c.get_goals() or "None"
-
-            # Write the character goals to the JSON file
-            json.dump(output, f, indent=4)
-
         # Construct the file path for saving character goal scores in JSON format
         fp = os.path.join(
             output_path,
@@ -1861,13 +1861,52 @@ class SurvivorGame(Game):
         with open(fp, mode="w") as f:
             # Create a dictionary of character names and their goal scores, defaulting to "None" if no scores exist
             output = {
-                name: c.get_goal_scores() or "None"
+                name: c.get_goals(round=-1, priority="all", include_scores=True)
+                or "None"
                 for name, c in self.characters.items()
             }
 
             # Add goal scores for jury members to the output dictionary
             for name, c in self.jury.items():
-                output[name] = c.get_goal_scores() or "None"
+                output[name] = c.get_goals(
+                    round=-1, priority="all", include_scores=True
+                ) or "None"
 
             # Write the character goal scores to the JSON file
             json.dump(output, f, indent=4)
+
+    def save_dialogue_data(self, text: str) -> None:
+        """
+        Saves the input dialogue data to a JSON file.
+        This method organizes the data into specific directories based on the experiment name and ID, ensuring that all
+        relevant information is stored for later analysis.
+
+        Args:
+            text (str): The text to save to the dialogue log.
+
+        Returns:
+            None
+        """
+
+        # Get the output path for saving log files
+        output_path = get_output_logs_path()
+
+        # Create a directory path for the current experiment logs, including experiment name and ID
+        experiment_dir = f"logs/{self.experiment_name}-{self.experiment_id}/"
+
+        # Construct the file path for saving dialogue data in JSON format
+        fp = os.path.join(
+            output_path,
+            experiment_dir,
+            f"dialogue_log_{self.experiment_name}-{self.experiment_id}.json",
+        )
+
+        # Create necessary directories for the file path
+        create_dirs(fp)
+
+        # Save the dialogue data to the specified JSON file
+        with open(fp, mode="a") as f:  # Change mode to "a" for appending
+            if os.path.getsize(fp) > 0:  # Check if the file is not empty
+                f.write("\n")  # Add a newline before writing new data
+            json.dump(text, f, indent=4)  # Write the dialogue text with indentation for readability
+

@@ -1,4 +1,7 @@
-print("Importing Things Base")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Things Base")
 
 from collections import defaultdict
 import json
@@ -53,8 +56,9 @@ class Thing:
         Returns:
             None
         """
-        
-        print(f"-\tInitializing Thing", name)
+
+        if circular_import_prints:
+            print(f"-\tInitializing Thing", name)
 
         self.id = next(Thing.new_id)  # Assign the next unique ID from the counter.
         Thing._last_id = (

@@ -50,17 +50,17 @@
       "maxBytes": 2000000,
       "backupCount": 3
     },
-    "gpt_calls_file_json": {
+    "gpt_call_file_json": {
       "class": "logging.FileHandler",
       "level": "DEBUG",
       "formatter": "json",
-      "filename": "logs/tmp_gpt_calls.jsonl",
+      "filename": "logs/tmp_gpt_call.jsonl",
       "mode": "a"
     },
-    "gpt_calls_queue_handler": {
+    "gpt_call_queue_handler": {
       "()": "text_adventure_games.utils.custom_logging.custom_logging_handlers.QueueListenerHandler",
       "handlers": [
-        "cfg://handlers.gpt_calls_file_json"
+        "cfg://handlers.gpt_call_file_json"
       ],
       "respect_handler_level": true
     }
@@ -79,10 +79,10 @@
         "queue_handler"
       ]
     },
-    "gpt_calls_logger": {
+    "gpt_call_logger": {
       "level": "DEBUG",
       "handlers": [
-        "gpt_calls_queue_handler"
+        "gpt_call_queue_handler"
       ]
     }
   }

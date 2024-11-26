@@ -5,7 +5,10 @@ File: consts.py
 Description: get/set any necessary API keys, constant values, etc.
 """
 
-print("Importing Consts")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Consts")
 
 # Importing the json module for working with JSON data, including parsing and serialization.
 import json
@@ -20,7 +23,8 @@ from os import PathLike
 from typing import Union
 
 # Import the logging module to enable logging functionality within this script
-print(f"\t{__name__} calling imports for logging")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for logging")
 import logging
 
 # Set up the logger at the module level
@@ -381,10 +385,8 @@ def validate_output_dir(fp, name, sim_id):
             return validate_output_dir(new_log_path, name, sim_id + 1)
         else:
             # Inform the user that the existing log file will be overwritten.
-            print("Overwriting log file is data...")
-            print(
-                "The game data will be overwritten when you run `game.save_simulation_data()`"
-            )
+            print("Overwriting log file data...")
+            print("The game data will be overwritten when you run `game.save_simulation_data()`")
 
             # Return the overwrite flag, the original file path, and the current simulation ID.
             return True, fp, sim_id
@@ -422,7 +424,7 @@ def check_user_input(name, sim_id):
     # Check if the user's input is neither 'y' nor 'n'.
     if decision not in ["y", "n"]:
         # If the input is invalid, recursively call the function to prompt the user again.
-        return check_user_input()
+        return check_user_input(name, sim_id)
 
     elif decision == "y":
         # Ask the user for a second confirmation to ensure they really want to overwrite.

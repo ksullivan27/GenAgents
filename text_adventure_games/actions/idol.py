@@ -156,7 +156,6 @@ class Search_Idol(base.Action):
                 description += "This area seems unlikely to have one."
 
             # Log the failure reason and notify the parser of the failure.
-            print("DEBUG: idol search failure due to: ", description)
             self.parser.fail(self.command, description, self.character)
             return False
 

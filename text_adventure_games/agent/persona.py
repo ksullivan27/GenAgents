@@ -5,7 +5,10 @@ File: agent/persona.py
 Description: Defines the Persona of an agent
 """
 
-print("Importing Persona")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Persona")
 
 # local imports
 from text_adventure_games.gpt.gpt_agent_setup import summarize_agent_facts

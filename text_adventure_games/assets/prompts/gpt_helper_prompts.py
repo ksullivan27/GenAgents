@@ -11,6 +11,7 @@ action_summary_prompt = (
 )
 
 action_importance_prompt = (
-    """You will be given a description of an action that someone took. Gauge the importance of their action using """
-    """the provided description. Return a score on a scale from 1 to 10, where 1 is mundane and 10 is critical."""
+    "You will be given a description of an action that someone took. Gauge the importance of their action using "
+    "the provided description. Return a score on a scale from 1 to {max_importance_score}, inclusive, where 1 is "
+    "mundane and {max_importance_score} is critical."
 )

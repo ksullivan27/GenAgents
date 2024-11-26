@@ -1,43 +1,55 @@
-print("Importing Characters")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Characters")
 
 import os
 from typing import List, Union
 
 # Local imports from the current package and parent packages to access various classes and functions.
 # Import the base class 'Thing' from the base module.
-print(f"\t{__name__} calling imports for Base Thing")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Base Thing")
 from .base import Thing
 
 # Import the 'Item' class from the items module to represent items in the game.
-print(f"\t{__name__} calling imports for Items")
+if circular_import_prints:
+        print(f"\t{__name__} calling imports for Items")
 from .items import Item
 
 # Import MemoryStream and MemoryType from the agent.memory_stream module for managing agent memory.
-print(f"\t{__name__} calling imports for MemoryStream and MemoryType")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for MemoryStream and MemoryType")
 from ..agent.memory_stream import MemoryStream, MemoryType
 
 # Import the Act class from the agent_cognition module to handle actions performed by agents.
-print(f"\t{__name__} calling imports for Act")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Act")
 from ..agent.agent_cognition.act import Act
 
 # Import the Reflect class from the agent_cognition module to handle reflection operations.
-print(f"\t{__name__} calling imports for Reflect")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Reflect")
 from ..agent.agent_cognition.reflect import Reflect
 
 # Import the Impressions class from the agent_cognition module to manage agent impressions of other characters.
-print(f"\t{__name__} calling imports for Impressions")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Impressions")
 from ..agent.agent_cognition.impressions import Impressions
 
 # Import the Goals class from the agent_cognition module to manage agent goals.
-print(f"\t{__name__} calling imports for Goals")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Goals")
 from ..agent.agent_cognition.goals import Goals
 
 # Import the perceive_location function from the agent_cognition module to help agents perceive their surroundings.
-print(f"\t{__name__} calling imports for Perceive")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Perceive")
 from ..agent.agent_cognition.perceive import perceive_location
 
 # Import the context_list_to_string function from the gpt_helpers module to convert context lists into string format.
-print(f"\t{__name__} calling imports for Context List to String")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Context List to String")
 from ..gpt.gpt_helpers import context_list_to_string
 
 
@@ -84,8 +96,9 @@ class Character(Thing):
         Returns:
             None
         """
-        
-        print(f"-\tInitializing Character", name)
+
+        if circular_import_prints:
+            print(f"-\tInitializing Character", name)
 
         # Call the initializer of the parent class (Thing) to set up the name and description attributes for the
         # character.
@@ -206,7 +219,7 @@ class Character(Thing):
         Returns:
             Character: An instance of the character class populated with the provided data.
         """
-        
+
         print(f"-\tFrom Primitive: Character {data['name']}")
 
         # Create a new instance of the character class using the provided name, description, and persona
@@ -329,7 +342,7 @@ class GenerativeAgent(Character):
         goals: The agent's goals.
         memory: The agent's memory stream.
         last_location_observations: Observations from the last location.
-        last_talked_to: The last character the agent interacted with.
+        last_talked_to: The last character(s) the agent interacted with.
         idol_search_count (int): Count of idol searches performed by the agent.
     """
 
@@ -352,7 +365,8 @@ class GenerativeAgent(Character):
             None
         """
 
-        print(f"-\tInitializing Generative Agent {persona.facts['Name']}")
+        if circular_import_prints:
+            print(f"-\tInitializing Generative Agent {persona.facts['Name']}")
 
         # Call the parent class's constructor to initialize the character with the persona's name, description, and
         # summary.
@@ -362,17 +376,12 @@ class GenerativeAgent(Character):
 
         # Set the cognitive group for the agent and determine if goals and impressions will be used based on the group.
         self.group = group
-        
-        print("GROUP:", self.group)
-        
+
         self.use_goals, self.use_impressions = GROUP_MAPPING[self.group]
-        
-        print("USE GOALS:", self.use_goals)
-        print("USE IMPRESSIONS:", self.use_impressions)
 
         # Assign the agent's persona and initialize impressions and goals based on cognitive settings.
         self.persona = persona
-        
+
         # Initialize the impressions for the agent based on whether impressions are used.
         self.impressions = Impressions(self) if self.use_impressions else None
 
@@ -385,50 +394,55 @@ class GenerativeAgent(Character):
         # Set the last location observations to None initially, indicating no observations have been made yet.
         self.last_location_observations = None
 
-        # Track the last character the agent interacted with, initialized to None.
+        # Track the last character(s) the agent interacted with, initialized to None.
         self.last_talked_to = None
 
         # Initialize a counter for the number of idol searches performed by the agent, starting at zero.
         self.idol_search_count = 0
 
-    def set_dialogue_participant(self, talked_to):
+    def set_dialogue_participants(self, talked_to):
         """
-        Set the last character that the agent has interacted with during dialogue.
-        This method updates the agent's record of the last dialogue participant based on the provided input.
+        Set the last character(s) that the agent has interacted with during dialogue.
+        This method updates the agent's record of the last dialogue participants based on the provided input.
 
-        If the input is None, it clears the last participant. If the input is a valid Character instance, it updates the
-        record; otherwise, it raises a ValueError for invalid input.
+        If the input is None, it clears the last participants. If the input is a valid Character instance or a set of
+        Character instances, it updates the record; otherwise, it raises a ValueError for invalid input.
 
         Args:
             self: The instance of the agent.
-            talked_to: The character that the agent has interacted with, or None to clear the record.
+            talked_to: A single character or a set of characters that the agent has interacted with, or None to clear
+            the record.
 
         Raises:
-            ValueError: If the provided input is not a Character instance or None.
+            ValueError: If the provided input is not a Character instance, a set of Characters, or None.
         """
 
-        # Check if the input is None; if so, clear the record of the last dialogue participant
+        # Check if the input is None; if so, clear the record of the last dialogue participants
         if not talked_to:
             self.last_talked_to = None
         # Check if the input is a valid Character instance
         elif isinstance(talked_to, Character):
             # Update the last dialogue participant to the provided character
+            self.last_talked_to = {talked_to}
+        # Check if the input is a set of Character instances
+        elif isinstance(talked_to, set) and all(isinstance(char, Character) for char in talked_to):
+            # Update the last dialogue participants to the provided set of characters
             self.last_talked_to = talked_to
-        # If the input is neither None nor a valid Character, raise an error
+        # If the input is neither None, a valid Character, nor a valid set of Characters, raise an error
         else:
             raise ValueError(f"{talked_to} is invalid.")
 
-    def get_last_dialogue_target(self):
+    def get_last_dialogue_targets(self):
         """
-        Retrieve the last character that the agent interacted with during dialogue.
-        This method returns the record of the last dialogue participant, which can be used for context in future
+        Retrieve the last character(s) that the agent interacted with during dialogue.
+        This method returns the record of the last dialogue participants, which can be used for context in future
         interactions.
 
         Args:
             self: The instance of the agent.
 
         Returns:
-            Character or None: The last character the agent talked to, or None if no interaction has occurred.
+            Set[Character] or None: The last character(s) the agent talked to, or None if no interaction has occurred.
         """
 
         # Return the last character that the agent interacted with during dialogue
@@ -479,14 +493,15 @@ class GenerativeAgent(Character):
         # Return the formatted string of perception descriptions, joining them with new lines.
         return context_list_to_string(perception_descriptions, sep="\n")
 
-    def get_standard_info(self, game, include_goals=True, include_perceptions=True):
+    def get_standard_info(self, game, include_goals=True, include_perceptions=True, include_impressions=False):
         """
         Generate a standard summary of the agent's current context within the game.
         This method provides information about the game world, the agent's persona, and optionally includes goals and
         perceptions.
 
         The summary includes world information, a personal summary of the agent, and, if specified, the agent's current
-        goals and perceptions.
+        goals, perceptions, and impressions.
+
         This is useful for providing the agent with relevant context for decision-making.
 
         Args:
@@ -494,33 +509,45 @@ class GenerativeAgent(Character):
             game: The current game object containing world information.
             include_goals (bool, optional): Whether to include the agent's goals in the summary. Default is True.
             include_perceptions (bool, optional): Whether to include the agent's perceptions in the summary. Default is
-            True.
+                                                  True.
+            include_impressions (bool, optional): Whether to include the agent's impressions in the summary. Default is
+                                                  True.
 
         Returns:
             str: A formatted summary string containing the agent's context.
         """
 
         # Start building the summary with world information from the game
-        summary = f"WORLD INFO: {game.world_info}\n"
+        summary = f"WORLD INFO:\n{game.world_info}"
+
         # Add the agent's personal summary to the summary
-        summary += f"You are {self.persona.get_personal_summary()}.\n"
+        summary += f"\n\nPERSONAL INFO:\nYou are {self.persona.get_personal_summary()}."
 
         # Check if the agent uses goals and if goals should be included in the summary
         if self.use_goals and include_goals:
+
+            # print("[CHARACTER] GET STANDARD INFO: GETTING GOALS FOR:", self.name)
+
             # Retrieve the current goals for the agent based on the current game round, appending them to the summary.
             if goals := self.get_goals(round=game.round, as_str=True):
-                summary += f"Your current GOALS:\n{goals}\n"
+                summary += f"\n\nPERSONAL GOALS:\n{goals}"
 
         # Check if perceptions should be included and if there are any last location observations
         if include_perceptions and self.last_location_observations:
             # Parse the agent's perceptions into a readable format, appending them to the summary.
             if perceptions := self._parse_perceptions():
-                summary += f"Your current perceptions are:\n{perceptions}\n"
+                summary += f"\n\nCURRENT PERCEPTIONS:\n{perceptions}"
+
+        if self.use_impressions and include_impressions:
+            if impressions := self.impressions.get_impressions(as_str=True, prefix="\n\n"):
+                summary += f"\n\nCURRENT IMPRESSIONS:{impressions}"
 
         # Return the complete summary string
         return summary
 
-    def get_goals(self, round=-1, priority="all", as_str=False):
+    def get_goals(
+        self, round=-1, priority="all", as_str=False, include_scores=False
+    ):
         """
         Retrieve the agent's current goals based on the specified round and priority.
         This method returns the goals if the agent is configured to use them; otherwise, it returns None.
@@ -542,7 +569,19 @@ class GenerativeAgent(Character):
         # Check if the agent is configured to use goals.
         return (
             # If goals are enabled, retrieve the goals for the current round with the specified priority and format.
-            self.goals.get_goals(round=round, priority=priority, as_str=as_str)
+            self.goals.get_goals(
+                round=round,
+                priority=priority,
+                include_node_ids=False,
+                include_description=True,
+                include_priority_levels=True,
+                include_scores=include_scores,
+                progress_as_percentage=False,
+                to_str=as_str,
+                list_prefix="",
+                join_str="\n",
+                sep_initial=False,
+            )
             # If goals are not enabled, return None.
             if self.use_goals
             else None
@@ -567,6 +606,8 @@ class GenerativeAgent(Character):
 
         # Check if the current game tick indicates the start of a new round and if the agent is configured to use goals
         if game.tick == 0 and self.use_goals:
+
+            # print("GENERATING GOALS (from generate_goals in Character) FOR:", self.name)
 
             # Uncomment the following line to debug and see which agent's goals are being set
             # print(f"Setting goal for {self.name}")
@@ -682,8 +723,11 @@ class GenerativeAgent(Character):
 
         # Iterate through each character that the agent can currently see
         for target in self.get_characters_in_view(game):
+
+            # print(f"{self.name} is updating impression for {target.name}...")
+
             # Update the agent's impression of the target character based on the current game context
-            self.impressions.update_impression(game, self, target)
+            self.impressions.update_impression(game, target)
 
     def to_primitive(self):
         """
@@ -715,7 +759,19 @@ class GenerativeAgent(Character):
         # If the agent has goals, include them in the data representation
         if self.goals:
             thing_data["use_goals"] = True
-            thing_data["goals"] = self.goals.get_goals()
+            thing_data["goals"] = self.goals.get_goals(
+                round=-1,
+                priority="all",
+                include_node_ids=False,
+                include_description=True,
+                include_priority_levels=True,
+                include_scores=True,
+                progress_as_percentage=False,
+                to_str=False,
+                list_prefix="",
+                join_str="\n",
+                sep_initial=False,
+            )
         else:
             thing_data["use_goals"] = False
             thing_data["goals"] = None
@@ -751,7 +807,7 @@ class GenerativeAgent(Character):
         Returns:
             Character: A fully constructed character instance with initialized attributes.
         """
-        
+
         print(f"-\tFrom Primitive: Character {data['name']}")
 
         # Create a new instance of the character class using the provided name, description, and persona

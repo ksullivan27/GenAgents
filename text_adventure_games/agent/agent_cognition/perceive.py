@@ -5,31 +5,39 @@ File: agent_cognition/perceive.py
 Description: defines how agents perceive their environment
 """
 
-print("Importing Perceive")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Perceive")
 
 from typing import TYPE_CHECKING, Dict
 
 # Local imports for memory types and utility functions.
-print(f"\t{__name__} calling imports for MemoryType")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for MemoryType")
 from text_adventure_games.agent.memory_stream import MemoryType
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import (
     parse_location_description,  # Function to parse descriptions of locations.
     find_difference_in_dict_lists,  # Function to find differences between lists of dictionaries.
 )
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (
     gpt_get_action_importance,
 )  # Function to assess the importance of actions based on GPT.
 
 # Conditional import statements for type checking to avoid circular dependencies.
 if TYPE_CHECKING:
-    print(f"\tg Type Checking imports for Game")
+    if circular_import_prints:
+        print(f"\tg Type Checking imports for Game")
     from text_adventure_games.games import Game  # Import Game class for type hinting.
 
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import (
         Character,  # Import Character class for type hinting.
     )

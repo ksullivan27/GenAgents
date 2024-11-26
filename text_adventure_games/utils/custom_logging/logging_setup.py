@@ -6,38 +6,50 @@ Description: create a logger that exists for the entire program.
              Any external library logging should be captured as well, though we don't care about this info.
 """
 
-print("Importing Logging Setup")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Logging Setup")
 
 # Import Union from the typing module to allow type hinting for variables that can hold multiple types.
-print(f"{__name__} calling imports for Union")
+if circular_import_prints:
+    print(f"{__name__} calling imports for Union")
 from typing import Union
 
 # Import PathLike from the os module to enable type hinting for objects that behave like file system paths.
-print(f"{__name__} calling imports for PathLike")
+if circular_import_prints:
+    print(f"{__name__} calling imports for PathLike")
 from os import PathLike
 
 # Import the os module for interacting with the operating system, including file and directory operations.
-print(f"{__name__} calling imports for os")
+if circular_import_prints:
+    print(f"{__name__} calling imports for os")
 import os
 
 # Import the json module for working with JSON data, including parsing and serialization.
-print(f"{__name__} calling imports for json")
+if circular_import_prints:
+    print(f"{__name__} calling imports for json")
 import json
 
 # Import the logging.config module to configure logging settings in the application.
-print(f"{__name__} calling imports for logging.config")
+if circular_import_prints:
+    print(f"{__name__} calling imports for logging.config")
 import logging.config
 
 # Import the pathlib module for object-oriented file system path manipulation.
-print(f"{__name__} calling imports for pathlib")
+if circular_import_prints:
+    print(f"{__name__} calling imports for pathlib")
 import pathlib
 
 # Import the datetime class from the datetime module and alias it as 'dt' for easier access to date and time functions.
-print(f"{__name__} calling imports for datetime")
+if circular_import_prints:
+    print(f"{__name__} calling imports for datetime")
 from datetime import datetime as dt
 
 # Local imports from the parent package, specifically functions related to directory and logging path management.
-print(f"{__name__} calling imports for consts")
+if circular_import_prints:
+    print(f"{__name__} calling imports for consts")
+
 from ..consts import (
     get_root_dir,  # Function to retrieve the root directory path.
     get_custom_logging_path,  # Function to get the path for custom logging.

@@ -12,7 +12,10 @@ Description: defines how agents store interpersonal impressions and theory-of-mi
 
 """
 
-print("Importing Impressions")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Impressions")
 
 # Importing the inspect module, which provides useful functions to get information about live objects
 import inspect
@@ -29,7 +32,8 @@ from text_adventure_games.assets.prompts import (
     impressions_prompts as ip,
 )  # Import prompts for impressions
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from text_adventure_games.gpt.gpt_helpers import (  # Import helper functions for GPT interactions
     limit_context_length,  # Function to limit the context length of prompts
     get_token_remainder,  # Function to get the remaining tokens available
@@ -38,24 +42,37 @@ from text_adventure_games.gpt.gpt_helpers import (  # Import helper functions fo
     GptCallHandler,  # Class to handle GPT calls
 )
 
-print(f"\t{__name__} calling imports for Retrieve")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Prompt Classes")
+from ...assets.prompts import prompt_classes
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Retrieve")
 from .retrieve import Retrieve  # Import Retrieve class for agent cognition
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from text_adventure_games.utils.general import (
     get_logger_extras,
 )  # Import utility for logging extras
 
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 # Import the get_models_config function from the consts module in the utils package.
 # This function is used to retrieve the configuration for different models used in the game.
 from text_adventure_games.utils.consts import get_models_config
 
+if circular_import_prints:
+    print(f"{__name__} calling imports for MemoryType")
+from ..memory_stream import MemoryType
+
 if TYPE_CHECKING:  # Check if type checking is enabled
-    print(f"\t{__name__} calling Type Checking imports for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Game")
     from text_adventure_games.games import Game  # Import Game class for type hints
 
-    print(f"\t{__name__} calling Type Checking imports for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking imports for Character")
     from text_adventure_games.things import (
         Character,
     )  # Import Character class for type hints
@@ -70,7 +87,6 @@ class Impressions:
         impressions (defaultdict): A dictionary storing impressions keyed by target agent identifiers.
         name (str): The name of the agent.
         id (int): The unique identifier of the agent.
-        last_target (Character): The last target character for which an impression was created.
         token_offset (int): Offset for token calculations in GPT prompts.
         offset_pad (int): Additional padding for token limits.
 
@@ -97,7 +113,8 @@ class Impressions:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tImpressions Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tImpressions Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -121,16 +138,14 @@ class Impressions:
             character (Character): The character associated with this impressions object.
         """
 
-        print(f"-\tInitializing Impressions")
+        if circular_import_prints:
+            print(f"-\tInitializing Impressions")
 
         # Initialize a dictionary to store impressions, with default values as empty dictionaries
         self.impressions = defaultdict(dict)
 
         # Set the character associated with this impressions object
         self.character = character
-
-        # Initialize the last target character to None
-        self.last_target = None
 
         # Initialize the GPT handler if it hasn't been set up yet
         Impressions.initialize_gpt_handler()
@@ -180,8 +195,21 @@ class Impressions:
             if no impression exists.
         """
 
+        # # Debugging: Print the type of keys in impressions
+        # print(
+        #     "IMPRESSIONS KEYS TYPES (_get_impression)",
+        #     [type(key) for key in self.impressions.keys()],
+        # )  # Print types of keys
+        # # Check if the target has __hash__ and __eq__ methods defined
+        # print("TARGET ID (_get_impression)", target.id)  # Print the ID of the target
+        # print("IMPRESSIONS IDs (_get_impression)", [key.id for key in self.impressions.keys()])
+
         # Retrieve the impression for the target character using a formatted key
-        impression = self.impressions.get(f"{target.name}_{target.id}", None)
+        impression = self.impressions.get(target, None)
+
+        # # Debugging: Check if the target is in the keys of the impressions
+        # print("Is target in impressions keys?", target in self.impressions)
+        # print("IMPRESSION (_get_impression)", impression)
 
         # If an impression exists and only the string is requested, return the impression text
         if impression and str_only:
@@ -194,6 +222,41 @@ class Impressions:
         # If no impression exists, return None
         else:
             return None
+
+    def get_impressions(self, as_str: bool = True, prefix: str = "") -> str | dict:
+        """
+        Retrieves all impressions for the character.
+
+        This method returns a list of impression messages for all characters if `as_str` is True,
+        or a dictionary mapping character names to their respective impressions if `as_str` is False.
+
+        Args:
+            as_str (bool): A flag indicating whether to return impressions as a string (True) or as a dictionary (False).
+            prefix (str): A prefix to add to the beginning of each impression message.
+
+        Returns:
+            str | dict: A string containing all impressions joined by new lines if `as_str` is True,
+                        or a dictionary mapping character names to their impressions if `as_str` is False.
+        """
+        # Initialize an empty list to store impressions for all characters
+        all_impressions = []
+
+        # Initialize a dictionary to store impressions if as_str is False
+        impressions_dict = {}
+
+        # Iterate through all impressions stored in the dictionary
+        for target, impression in self.impressions.items():
+            # If as_str is True, format the impression message
+            if as_str:
+                formatted_impression = f"{prefix}{target}: {impression['impression']}"
+                all_impressions.append(formatted_impression)
+            else:
+                # Extract the character name from the key and map it to the impression
+                # character_name = target.split('_')[0]  # Assuming key format is "{name}_{id}"
+                impressions_dict[target] = impression['impression']
+
+        # Return the list of impressions, or the dictionary if as_str is False
+        return "\n".join(all_impressions) if as_str else impressions_dict
 
     def get_multiple_impressions(self, character_list) -> list:
         """
@@ -213,6 +276,9 @@ class Impressions:
 
         # Iterate through each character in the provided character list
         for char in character_list:
+            # print("GETTING IMPRESSION FOR", char.name, char)
+
+            # print("CHARACTER IMPRESSIONS", self.impressions)
             # Skip the current character to avoid self-impression
             if char is self.character:
                 continue
@@ -224,6 +290,8 @@ class Impressions:
 
             # Append the impression text for the character, or "None" if no impression exists
             char_impression += self._get_impression(char) or "None\n"
+
+            # print("CHAR IMPRESSION FOR", char.name, char_impression)
 
             # Add the constructed impression string to the list
             char_impressions.append(char_impression)
@@ -245,6 +313,8 @@ class Impressions:
             None
         """
 
+        # print("[IMPRESSIONS] UPDATING IMPRESSION FOR:", target.name)
+
         # Get the total number of ticks that have occurred in the game
         total_ticks = game.total_ticks
 
@@ -264,7 +334,7 @@ class Impressions:
             should_update = True
 
         # Ensure that an impression is not made until at least half a round has passed
-        if should_update and total_ticks > game.max_ticks_per_round / 2:
+        if should_update: # and total_ticks > game.max_ticks_per_round / 2:
             # Trigger the process to set a new impression for the target character
             self.set_impression(game, target)
 
@@ -282,26 +352,26 @@ class Impressions:
             None
         """
 
-        # Store the target character for which the impression is being set
-        self.last_target = target
+        # print("SETTING IMPRESSION FOR:", target.name)
 
         # Generate the system and user prompts for the GPT model based on the game context and characters
         system, user = self.build_impression_prompts(game, target)
 
         # Retrieve the impression from the GPT model using the generated prompts
-        impression = self.gpt_generate_impression(system, user, target)
+        impression_dict = self.gpt_generate_impression(system, user, game, target)
 
-        # Log the generated impression for debugging purposes (commented out)
-        # print(f"{self.character.name} impression of {target.name}: {impression}")
+        impression_str = ""
+        for key, value in impression_dict.items():
+            impression_str += f"\n- {key}: {value}"
 
-        # Log the impression in the game's logger for record-keeping
-        self._log_impression(game, target, impression)
+        # print("GPT GENERATED IMPRESSION:")
+        # print(impression_str)
 
         # Update the internal impressions dictionary with the new impression details
         self.impressions.update(
             {
-                f"{target.name}_{target.id}": {
-                    "impression": impression,  # The generated impression text
+                target: {
+                    "impression": impression_str,  # The generated impression text
                     "round": game.round,  # The current round of the game
                     "tick": game.tick,  # The current tick of the game
                     "creation": game.total_ticks,  # The total ticks at the time of impression creation
@@ -309,7 +379,7 @@ class Impressions:
             }
         )
 
-    def gpt_generate_impression(self, system_prompt, user_prompt) -> str:
+    def gpt_generate_impression(self, system_prompt, user_prompt, game, target) -> str:
         """
         Generates an impression of a target character using the GPT model based on provided prompts.
         This method handles potential errors related to token limits and adjusts the token offset accordingly.
@@ -320,15 +390,21 @@ class Impressions:
         Args:
             system_prompt (str): The system prompt containing contextual information for the GPT model.
             user_prompt (str): The user prompt that specifies the target character and relevant details.
+            game (Game): The current game object providing context for the impression.
+            target (Character): The target character for whom the impression is being generated.
 
         Returns:
-            str: The generated impression of the target character, or triggers a re-evaluation if a token limit error
+            dict: The generated impression of the target character, or triggers a re-evaluation if a token limit error
             occurs.
         """
 
         # Generate an impression using the GPT handler with the provided system and user prompts
         impression = self.gpt_handler.generate(
-            system=system_prompt, user=user_prompt, character=self.character
+            system=system_prompt,
+            user=user_prompt,
+            character=self.character,
+            response_format=prompt_classes.Impressions,
+            game=game,
         )
 
         # Check if the result is a tuple, indicating a potential error due to exceeding token limits
@@ -343,10 +419,66 @@ class Impressions:
             self.offset_pad += 2 * self.offset_pad
 
             # Trigger a re-evaluation of the impression for the last target character
-            return self.set_impression(self.game, self.last_target)
+            return self.set_impression(self.game, target)
+
+        # Convert the parsed goals to a dictionary
+        impressions_dict = {}
+        impressions_dict["Key Strategies"] = impression.key_strategies
+        impressions_dict["Probable Next Moves"] = impression.probable_next_moves
+        impressions_dict["Impressions of Me"] = impression.impressions_of_me
+        impressions_dict["Information to Keep Secret"] = impression.information_to_keep_secret
+
+        # Log the impression in the game's logger for record-keeping
+        self._log_impression(game, target, impressions_dict)
+
+        self.add_to_memory(game, target, impressions_dict)
 
         # Return the generated impression if no errors occurred
-        return impression
+        return impressions_dict
+
+    def add_to_memory(self, game: "Game", target: "Character", impressions_dict: dict) -> None:
+        """
+        Add the generated impression to the character's memory.
+
+        This method iterates through the impressions dictionary and formats each key-value pair
+        to include the target character's name. It then summarizes and scores the action described
+        in the impression, adding the summarized memory to the character's memory.
+
+        Args:
+            game (Game): The current game object providing context for the impression.
+            target (Character): The target character for whom the impression is being generated.
+            impressions_dict (dict): A dictionary containing the impressions with keys as categories
+                                     and values as the corresponding impressions.
+
+        Returns:
+            None: This method modifies the character's memory in place and does not return a value.
+        """
+        # Iterate through each key-value pair in the impressions dictionary
+        for key, value in impressions_dict.items():
+
+            # Format the key to include the target's name
+            key = target.name + "'s perceived " + key.lower() + ": "
+
+            # Summarize and score the action described in the statement, obtaining keywords and importance
+            _, importance, ref_kwds = game.parser.summarize_and_score_action(
+                description=key + value,
+                thing=self.character,
+                needs_summary=False,
+                needs_score=True,
+            )
+
+            # Add the summarized memory to the character's memory with relevant details
+            self.character.memory.add_memory(
+                game.round,
+                game.tick,
+                value,  # TODO: Consider using key + value here
+                ref_kwds,
+                self.character.location.name,
+                success_status=True,
+                memory_importance=importance,
+                memory_type=MemoryType.IMPRESSION.value,
+                actor_id=self.character.id,
+            )
 
     def build_impression_prompts(self, game, target):
         """
@@ -391,7 +523,8 @@ class Impressions:
 
         # Import Character from text_adventure_games.things.characters (inside the function to avoid circular imports)
 
-        print(f"\t{__name__} interiorcalling imports for Character")
+        if circular_import_prints:
+            print(f"\t{__name__} interior calling imports for Character")
         from text_adventure_games.things.characters import Character
 
         # Retrieve the standard information of the character, excluding perceptions
@@ -400,7 +533,7 @@ class Impressions:
         )
 
         # Append the formatted prompt for generating impressions, including the target character's name
-        system_prompt += ip.gpt_impressions_prompt.format(target_name=target_name)
+        system_prompt += "\n\nCURRENT TASK:\n" + ip.gpt_impressions_prompt.format(target_name=target_name)
 
         # Calculate the number of tokens in the constructed system prompt
         sys_tkn_count = get_prompt_token_count(
@@ -427,15 +560,30 @@ class Impressions:
 
         # Import Character from text_adventure_games.things.characters (inside the function to avoid circular imports)
 
-        print(f"\t{__name__} interior calling imports for Character")
+        if circular_import_prints:
+            print(f"\t{__name__} interior calling imports for Character")
         from text_adventure_games.things.characters import Character
 
+        current_tom_primer = "\n\nCurrent theory of mind for {t} ".format(
+            t=target.name
+        )
+
+        memories_primer = "\n\nMemories to consider in developing a theory of mind for {t}:\n".format(
+            t=target.name
+        )
+
         # Create a list containing a string that identifies the target person by name
-        always_included = ["Target person: {t}\n\n".format(t=target.name)]
+        always_included = [
+            "Target person: {t}".format(t=target.name),
+            current_tom_primer,
+            memories_primer,
+            "in chronological order:\n",
+            "in order from least to most relevant:\n",
+        ]
 
         # Calculate the token count for the always included string, considering it as a user role prompt
         always_included_count = get_prompt_token_count(
-            always_included[0],
+            always_included,
             role="user",
             pad_reply=True,
             tokenizer=game.parser.tokenizer,
@@ -495,21 +643,16 @@ class Impressions:
 
         # If an impression exists, append the current theory of mind to the message
         if target_impression:
-            ordering = (
-                "in chronological order"
-                if self.chronological
-                else "in order from least to most relevant"
-            )
-            message += "Current theory of mind for {t} {o}:\n{i}\n\n".format(
-                t=target.name, o=ordering, i=target_impression
-            )
+            message += always_included[1] + (always_included[3] if self.chronological else always_included[4]) + target_impression
 
         # If there are relevant memories, append them to the message
         if context_list:
             memory_str = context_list_to_string(context_list, sep="\n")
-            message += "Memories to consider in developing a theory of mind for {t}:\n{m}".format(
+            message += "\n\nMemories to consider in developing a theory of mind for {t}:\n{m}".format(
                 t=target.name, m=memory_str
             )
+
+            message += always_included[2] + memory_str
 
         # Return the constructed message
         return message

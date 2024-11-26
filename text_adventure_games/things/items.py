@@ -1,6 +1,10 @@
-print("Importing Items")
+circular_import_prints = False
 
-print(f"\t{__name__} calling imports for Things Items")   
+if circular_import_prints:
+    print("Importing Items")
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Things Items")   
 from .base import Thing
 
 class Item(Thing):
@@ -39,7 +43,8 @@ class Item(Thing):
             None
         """
         
-        print(f"-\tInitializing Item", name)
+        if circular_import_prints:
+            print(f"-\tInitializing Item", name)
 
         # Call the constructor of the parent Thing class to initialize the name, description, properties, and command
         # attributes.

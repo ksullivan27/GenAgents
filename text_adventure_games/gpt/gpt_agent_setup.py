@@ -5,23 +5,29 @@ File: gpt_agent.py
 Description: Methods that access the OPENAI API and make a call to GPT
 """
 
-print("Importing GptAgentSetup")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing GptAgentSetup")
 
 import re  # Import the regular expressions module for pattern matching and string manipulation.
 import openai  # Import the OpenAI library to interact with the OpenAI API.
 
 # Relative imports for utility functions and the GptCallHandler class.
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 from ..utils import (
     general,
 )  # Import general utility functions from the parent directory.
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 from .gpt_helpers import (
     GptCallHandler,
 )  # Import the GptCallHandler class from the current package.
 
-print(f"\t{__name__} calling imports for PromptClasses")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for PromptClasses")
 from ..assets.prompts import prompt_classes
 
 # Initialize the GPT handler with specific parameters for API interaction.
@@ -53,7 +59,7 @@ def get_new_character_from_gpt(description):
     """
 
     # client = general.set_up_openai_client(org="Penn")
-    GPT_HANDLER.update_params(max_tokens=500, temperature=1.25)
+    GPT_HANDLER.update_params(max_tokens=1000, temperature=1.25)
 
     system_prompt = (
         """You are a character generator. You should fill in the following character information based on a short """
@@ -71,7 +77,11 @@ def get_new_character_from_gpt(description):
     )
 
     user_prompt = f"Create a character who fits this description: {description}"
-    response = GPT_HANDLER.generate(system_prompt, user_prompt, response_format=prompt_classes.Character)
+    response = GPT_HANDLER.generate(
+        system=system_prompt,
+        user=user_prompt,
+        response_format=prompt_classes.Character,
+    )
     GPT_HANDLER.reset_defaults()
 
     print("RESPONSE:", response)

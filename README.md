@@ -75,12 +75,55 @@ Save this file as `config.json` or `.config.json` at the package root.
 ```json
 {
     "organizations": {
-        "My University": {
+        "Penn": {
             "api_key": "sk-..."
         },
         "Helicone": {
             "api_key": "sk-...",
             "base_url": "https://..."
+        }
+    },
+    "models": {
+        "act": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "goals": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "impressions": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "reflect": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "retrieve": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "vote": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "dialogue": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "parser": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "persona_creation": {
+            "model": "gpt-4o-mini",
+            "organization": "Penn"
+        },
+        "miscellaneous": {
+            "model": "gpt-4o-mini",
+            "embedding_model": "text-embedding-3-small",
+            "organization": "Penn"
         }
     }
 }
@@ -90,7 +133,7 @@ Save this file as `config.json` or `.config.json` at the package root.
 
 ## Quickstart
 
-If you want to run a game with a spcific set of characters, add their Persona JSON files to a folder and place this folder in the `assets` directory. You can find examples in [`assets`](assets/). If you want GPT to generate these characters for you, then create a user-specified character skeleton, following the format shown [here](assets/character_skeletons); this should also be placed in the assets directory.
+If you want to run a game with a specific set of characters, add their Persona JSON files to a folder and place this folder in the `assets` directory. You can find examples in [`assets`](assets/). If you want GPT to generate these characters for you, then create a user-specified character skeleton, following the format shown [here](assets/character_skeletons); this should also be placed in the assets directory.
 
 ### Using `run_game.py`:
 

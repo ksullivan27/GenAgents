@@ -1,11 +1,16 @@
 # local imports
 
-print("Importing Actions Locations")
+circular_import_prints = False
 
-print(f"\t{__name__} calling imports for Base")
+if circular_import_prints:
+    print("Importing Actions Locations")
+
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Base")
 from . import base
 
-print(f"\t{__name__} calling imports for Character")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Character")
 from ..things import Character  # Item  # , Location
 
 

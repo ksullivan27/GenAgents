@@ -13,7 +13,10 @@ Description: defines how agents reflect upon their past experiences
 # Import future annotations for forward reference type hints.
 from __future__ import annotations
 
-print("Importing Goals")
+circular_import_prints = False
+
+if circular_import_prints:
+    print("Importing Goals")
 
 # Import TYPE_CHECKING to allow for type hints without circular imports.
 from typing import TYPE_CHECKING, Union, List, Set, Dict
@@ -24,20 +27,20 @@ from collections import defaultdict
 # Import numpy for numerical operations.
 import numpy as np
 
-# Import the get_models_config function from the consts module in the utils package.
-# This function is used to retrieve the configuration for different models used in the game.
-
-print(f"\t{__name__} calling imports for Consts")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Consts")
 from text_adventure_games.utils.consts import get_models_config
 
-print(f"\t{__name__} calling imports for General")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for General")
 # Import utility functions for logging and text embedding from the general module.
 from text_adventure_games.utils.general import (
     get_logger_extras,
     get_text_embedding,
 )
 
-print(f"\t{__name__} calling imports for GoalPrompt")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GoalPrompt")
 # Import the goal prompt from the prompts module.
 from text_adventure_games.assets.prompts import goal_prompt as gp
 
@@ -50,10 +53,12 @@ import inspect
 # Import the copy module to allow for deep copying of data structures
 import copy
 
-print(f"\t{__name__} calling imports for Prompt Classes")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Prompt Classes")
 from ...assets.prompts import prompt_classes
 
-print(f"\t{__name__} calling imports for GptHelpers")
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for GptHelpers")
 # Import helper functions for GPT calls and context management from the gpt_helpers module.
 from text_adventure_games.gpt.gpt_helpers import (
     limit_context_length,
@@ -63,16 +68,19 @@ from text_adventure_games.gpt.gpt_helpers import (
     GptCallHandler,
 )
 
+if circular_import_prints:
+    print(f"\t{__name__} calling Type Checking import for MemoryStream")
+from text_adventure_games.agent.memory_stream import MemoryType
+
 # Conditional import for type checking to avoid circular dependencies.
 if TYPE_CHECKING:
-    print(f"\t{__name__} calling Type Checking import for Character")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking import for Character")
     from text_adventure_games.things.characters import Character
 
-    print(f"\t{__name__} calling Type Checking import for Game")
+    if circular_import_prints:
+        print(f"\t{__name__} calling Type Checking import for Game")
     from text_adventure_games.games import Game
-
-    print(f"\t{__name__} calling Type Checking import for MemoryStream")
-    from text_adventure_games.agent.memory_stream import MemoryType
 
 # 1. Get character's goals
 # 2. Obtain a list of memories
@@ -143,7 +151,7 @@ class Goals:
 
     gpt_handler = None  # Class-level attribute to store the shared GPT handler
     model_params = {
-        "max_output_tokens": 256,
+        "max_output_tokens": 800,
         "temperature": 1,
         "top_p": 1,
         "max_retries": 5,
@@ -157,7 +165,8 @@ class Goals:
         Initialize the shared GptCallHandler if it hasn't been created yet.
         """
 
-        print(f"-\tGoals Module is initializing GptCallHandler")
+        if circular_import_prints:
+            print(f"-\tGoals Module is initializing GptCallHandler")
 
         # Initialize the GPT handler if it hasn't been set up yet
         if cls.gpt_handler is None:
@@ -190,7 +199,11 @@ class Goals:
             offset_pad (int): Additional padding for token management.
         """
 
-        print(f"-\tInitializing Goals")
+        if circular_import_prints:
+            print(f"-\tInitializing Goals")
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        Goals.initialize_gpt_handler()
 
         # Assign the character associated with this goals manager to an instance variable.
         self.character = character
@@ -200,9 +213,6 @@ class Goals:
 
         # Initialize a dict to store goal completion scores stored by node id.
         self.goal_scores = dict()
-
-        # Initialize the GPT handler if it hasn't been set up yet
-        Goals.initialize_gpt_handler()
 
         # Initialize the logger if it hasn't been set up yet
         if Goals.logger is None:
@@ -249,6 +259,8 @@ class Goals:
             game (Game): the game
         """
 
+        # print("GPT GENERATING GOALS (goals) FOR:", self.character.name)
+
         # Build the system and user prompts required for goal generation.
         system, user = self.build_goal_prompts(game)
 
@@ -258,6 +270,7 @@ class Goals:
             user=user,
             character=self.character,
             response_format=prompt_classes.Goals,
+            game=game,
         )
 
         # Check if the generated goal is a tuple, indicating a potential error related to token limits.
@@ -328,7 +341,9 @@ class Goals:
         )
 
         # Append the predefined goals prompt to the character's standard information to form the complete system prompt.
-        system_prompt += "\n\n" + gp.gpt_goals_prompt
+        system_prompt += "\n\nCURRENT TASK:\n" + gp.gpt_goals_prompt.format(
+            max_progress_score=Goals.max_progress_score
+        )
 
         # Calculate the token count for the constructed system prompt to manage token limits.
         system_tkn_count = get_prompt_token_count(
@@ -362,6 +377,7 @@ class Goals:
             "\n\nGoals of two rounds prior with progress scores from prior round:",
             "\n\nGoals of three rounds prior with progress scores from two rounds prior:",
             "\n\nYou can keep the previous goal, update the previous goal or create a new one based on your strategy.",
+            "You have no previous goals for reference. Brainstorm some.",
         ]
 
         # Calculate the token count for the always included strings
@@ -393,6 +409,7 @@ class Goals:
 
         # Get the previous round's goal and score if it exists
         if round > 0:
+            # print("GETTING GOALS FOR ROUND:", round - 1)
             # Get a dict mapping priority strings to dicts mapping node ids to goal descriptions
             goals_prev_1 = self.get_goals(
                 round=round - 1,
@@ -403,11 +420,12 @@ class Goals:
                 include_scores=True,
                 progress_as_percentage=False,
                 to_str=False,
-                list_prefix="\n\t",
+                list_prefix="\n- ",
             )
 
         # Get the goal and score from two rounds prior if it exists
         if round > 1:
+            # print("GETTING GOALS FOR ROUND:", round - 2)
             # Get a dict mapping priority strings to dicts mapping node ids to goal descriptions
             goals_prev_2 = self.get_goals(
                 round=round - 2,
@@ -418,11 +436,12 @@ class Goals:
                 include_scores=True,
                 progress_as_percentage=False,
                 to_str=False,
-                list_prefix="\n\t",
+                list_prefix="\n- ",
             )
 
         # Get the goal and score from three rounds prior if it exists
         if round > 2:
+            # print("GETTING GOALS FOR ROUND:", round - 3)
             # Get a dict mapping priority strings to dicts mapping node ids to goal descriptions
             goals_prev_3 = self.get_goals(
                 round=round - 3,
@@ -433,8 +452,7 @@ class Goals:
                 include_scores=True,
                 progress_as_percentage=False,
                 to_str=False,
-                list_prefix="\n\t",
-                
+                list_prefix="\n- ",
             )
 
         # Initialize a list to store previous reflections
@@ -449,10 +467,10 @@ class Goals:
         for node_id in node_ids:
             node = self.character.memory.get_observation(node_id)
             if node.node_type.value == 3:  # Check if the node type is a reflection
-                reflections_raw.append("\n\t" + node.node_description)
+                reflections_raw.append("\n- " + node.node_description)
 
-        # Initialize the user prompt with the always included context
-        user_prompt = always_included[0]  # "Additional context for creating your goal:"
+        # Initialize the user prompt
+        user_prompt = ""
 
         # If there are reflections from two rounds prior, add them to the user prompt
         if reflections_raw:
@@ -481,13 +499,13 @@ class Goals:
 
         user_prompt += goals_str
 
-        # Append the final always included context to the user prompt
-        user_prompt += always_included[
-            5
-        ]  # "\n\nYou can keep the previous goal, update the previous goal or create a new one based on your strategy."
-
-        # Return the constructed user prompt
-        return user_prompt
+        # Return the constructed user prompt (if it's not empty, prepend "Additional context for creating your goal:"
+        # and append "You can keep the previous goal, update the previous goal or create a new one based on your strategy.")
+        return (
+            always_included[0] + user_prompt + always_included[5]
+            if user_prompt
+            else always_included[6]
+        )
 
     def get_goals(
         self,
@@ -502,7 +520,7 @@ class Goals:
         list_prefix: str = "",
         join_str: str = "\n",
         sep_initial: bool = False,
-    ) -> Union[dict, List[str], None]:
+    ) -> Union[str, List[str], List[int], None]:
         """
         Retrieves goals based on the specified round and priority.
 
@@ -526,11 +544,11 @@ class Goals:
             sep_initial (bool, optional): If True, prepends the join_str at the beginning of the formatted string.
 
         Returns:
-            Union[dict, List[str], None]: The goals for the specified round and priority as a dictionary mapping round
-                ints to dicts mapping priority strings to dicts mapping node ids to their goal description (or lists of
-                descriptions if include_node_ids is False). This could also return a list of goal descriptions if both
-                round and priority are specified, or None if no goals are found.
+            Union[str, List[str], List[int], None]: The goals for the specified round and priority as a string, a list
+            of goal descriptions (optionally including priority levels and progress scores), or a list of node ids.
         """
+        # print("GETTING GOALS FOR:", self.character.name)
+        # print(self.goals.items())
 
         if round != -1:
             if round not in self.goals:  # Check if the round exists in the dictionary
@@ -551,11 +569,35 @@ class Goals:
         # Make a deep copy of the goals to avoid modifying the original data structure
         goals_copy = copy.deepcopy(goals)
 
+        # print("GOALS COPY FOR:", self.character.name, type(goals_copy))
+        # for goal in goals_copy:
+        #     print("-", goal)
+
         # Reconfigure the goals to replace node_ids with descriptions
         reconfigured_goals = self.reconfigure_goals(goals_copy)
 
-        return Goals.format_goals(
-            reconfigured_goals,
+        # print("RECONFIGURED GOALS FOR:", self.character.name, type(reconfigured_goals))
+        # for goal in reconfigured_goals:
+        #     print("-", goal)
+
+        # print("GOALS PRE-FORMATTING:", reconfigured_goals)
+
+        # print("CHARACTER's GOAL MEMORIES")
+        # for obs in self.character.memory.observations:
+        #     if obs.node_type.value == 5:
+        #         print(
+        #             "-",
+        #             obs.node_id,
+        #             obs.node_round,
+        #             obs.node_tick,
+        #             obs.node_type,
+        #             obs.node_description,
+        #         )
+
+        # print("DONE GETTING (returning) GOALS")
+
+        return self.format_goals(
+            goals=reconfigured_goals,
             include_node_ids=include_node_ids,
             include_description=include_description,
             include_priority_levels=include_priority_levels,
@@ -599,7 +641,6 @@ class Goals:
 
         # Iterate through the goals for the current round
         for priority, goals in goals_dict.items():
-
             # Set the importance of the goal based on its priority
             if priority == "Low Priority":
                 ref_importance = 8
@@ -665,7 +706,9 @@ class Goals:
         """
 
         if impartial:
-            system_prompt = gp.impartial_evaluate_goals_prompt
+            system_prompt = gp.impartial_evaluate_goals_prompt.format(
+                max_progress_score=Goals.max_progress_score
+            )
         else:
             # Retrieve the standard information about the character from the game, excluding goals and perceptions.
             system_prompt = self.character.get_standard_info(
@@ -673,7 +716,9 @@ class Goals:
             )
 
             # Retrieve the system prompt for evaluating goals from the gp module
-            system_prompt += "\n" + gp.persona_evaluate_goals_prompt
+            system_prompt += "\n" + gp.persona_evaluate_goals_prompt.format(
+                max_progress_score=Goals.max_progress_score
+            )
 
         # Count the tokens in the system prompt for token management
         system_prompt_tokens = get_prompt_token_count(system_prompt, role="system")
@@ -689,6 +734,7 @@ class Goals:
             user=user_prompt,
             character=self.character,
             response_format=prompt_classes.Scores,
+            game=game,
         )
 
         # Check if the generated goal is a tuple, indicating a potential error related to token limits.
@@ -723,6 +769,11 @@ class Goals:
             str: A formatted string containing the user prompt with the goal, reflections, and actions.
         """
 
+        # print("-" * 100)
+        # print("BUILDING EVALUATION USER PROMPT FOR:", self.character.name)
+
+        # print("GETTING GOALS FOR BUILDING EVALUATION USER PROMPT:", game.round)
+
         # Retrieve the goals for the current round
         goals = self.get_goals(
             round=game.round,
@@ -733,9 +784,22 @@ class Goals:
             include_scores=False,
             progress_as_percentage=False,
             to_str=True,
-            join_str="\n\t",
+            join_str="\n- ",
             sep_initial=True,
         )
+
+        # print("ROUND", game.round)
+        # print("GOALS (build_eval_user_prompt)", self.goals)
+        # for obs in self.character.memory.observations:
+        #     if obs.node_type.value == 5:
+        #         print(
+        #             "-",
+        #             obs.node_id,
+        #             obs.node_type,
+        #             obs.node_round,
+        #             obs.node_tick,
+        #             obs.node_description,
+        #         )
 
         # Check if no goals have been set for the current round
         if goals is None:
@@ -773,14 +837,14 @@ class Goals:
         # Collect reflections and actions made by this agent in the current round
         for node_id in node_ids:
             node = self.character.memory.get_observation(node_id)
-            # Check if the node is an action made by this agent
-            if node.node_type.value == 1 and node.node_is_self == 1:
+            # Check if the node is an action
+            if node.node_type.value == 1:
                 actions_raw.append(node.node_description)
-            # Check if the node is a dialogue made by this agent
-            elif node.node_type.value == 2 and node.node_is_self == 1:
+            # Check if the node is a dialogue
+            elif node.node_type.value == 2:  # and node.node_is_self == 1:
                 dialogue_raw.append(node.node_description)
-            # Check if the node is a reflection made by this agent
-            elif node.node_type.value == 3 and node.node_is_self == 1:
+            # Check if the node is a reflection
+            elif node.node_type.value == 3:
                 reflections_raw.append(node.node_description)
 
         # Set limits for actions, dialogue, and reflections based on available tokens
@@ -790,40 +854,51 @@ class Goals:
             int(available_tokens * 0.3),
         )
 
-        if actions_raw:
-            # Limit the length of the actions based on available tokens
-            actions_list = limit_context_length(
-                history=["\n\nActions:"] + ["\n\t" + a for a in actions_raw],
+        # Limit the length of the actions based on available tokens
+        actions_list = (
+            limit_context_length(
+                history=["\n\nActions:"] + ["\n- " + a for a in actions_raw],
                 max_tokens=actions_limit,
                 tokenizer=game.parser.tokenizer,
             )
+            if actions_raw
+            else []
+        )
 
-        if dialogue_raw:
-            # Limit the length of the actions based on available tokens
-            dialogue_list = limit_context_length(
-                history=["\n\nDialogues:"] + ["\n\t" + d for d in dialogue_raw],
+        # Limit the length of the dialogues based on available tokens
+        dialogue_list = (
+            limit_context_length(
+                history=["\n\nDialogues:"] + ["\n- " + d for d in dialogue_raw],
                 max_tokens=dialogue_limit,
                 tokenizer=game.parser.tokenizer,
             )
+            if dialogue_raw
+            else []
+        )
 
-        if reflections_raw:
-            # Limit the length of the reflections based on available tokens
-            reflections_list = limit_context_length(
-                history=["\n\nReflections:"] + ["\n\t" + r for r in reflections_raw],
+        # Limit the length of the reflections based on available tokens
+        reflections_list = (
+            limit_context_length(
+                history=["\n\nReflections:"] + ["\n- " + r for r in reflections_raw],
                 max_tokens=reflections_limit,
                 tokenizer=game.parser.tokenizer,
             )
+            if reflections_raw
+            else []
+        )
 
-        # Convert the limited actions, dialogue, and reflections actions lists to formatted strings
+        # Convert the limited actions, dialogue, and reflections lists to formatted strings
         actions_str = context_list_to_string(actions_list, sep="")
         dialogue_str = context_list_to_string(dialogue_list, sep="")
         reflections_str = context_list_to_string(reflections_list, sep="")
 
-        user_prompt = always_included[0]
-        user_prompt += goal_prompt
-        user_prompt += actions_str
-        user_prompt += dialogue_str
-        user_prompt += reflections_str
+        user_prompt = (
+            always_included[0]
+            + goal_prompt
+            + actions_str
+            + dialogue_str
+            + reflections_str
+        )
 
         return user_prompt
 
@@ -868,9 +943,8 @@ class Goals:
             for node_id in node_ids
         }
 
-    @classmethod
     def format_goals(
-        cls,
+        self,
         goals: dict,
         include_node_ids: bool = False,
         include_description: bool = True,
@@ -881,14 +955,15 @@ class Goals:
         list_prefix: str = "",
         join_str: str = "\n",
         sep_initial: bool = False,
-    ) -> Union[str, list, list[int]]:
+    ) -> Union[str, list[str], list[int]]:
         """
         Formats the provided goals optionally with priority levels and progress scores into a string representation or
         a list.
 
         Args:
-            goals (dict): A dictionary where keys are priority levels (e.g., 'High Priority') and values are
-                          dictionaries that map node IDs to their corresponding goal descriptions.
+            goals (dict): A dictionary where keys are either round numbers mapping to priority levels mapping to node IDs
+                          and their corresponding goal descriptions, or priority levels mapping to node IDs and their
+                          corresponding goal descriptions, or node IDs mapping to goal descriptions.
             include_node_ids (bool, optional): Indicates whether to include node IDs in the formatted output. Defaults
                                                 to False.
             include_priority_levels (bool, optional): Indicates whether to include priority levels in the
@@ -898,17 +973,17 @@ class Goals:
             progress_as_percentage (bool, optional): If True, progress scores are formatted as percentages. Defaults to
                                                       False.
             to_str (bool, optional): Indicates whether to return the formatted goals as a string. Defaults to False.
-            join_str (str, optional): The string used to join the formatted goals. Defaults to "\n\t".
+            join_str (str, optional): The string used to join the formatted goals. Defaults to "\n- ".
             sep_initial (bool, optional): Indicates whether to prepend the join_str at the beginning of the
                                           formatted string. Defaults to True.
             include_description (bool, optional): Indicates whether to include goal descriptions in the formatted output.
                                                   Defaults to True.
 
         Returns:
-            Union[str, list, list[int]]: If to_str is True, returns a formatted string containing goal descriptions and their
-                                         progress scores. If to_str is False, returns a list of formatted goals. If include_node_ids
-                                         is True, include_priority_levels is False, include_scores is False, and to_str is False,
-                                         returns a list of ints.
+            Union[str, list[str], list[int]]: If to_str is True, returns a formatted string containing goal descriptions
+                                              and their progress scores. If to_str is False, returns a list of formatted
+                                              goals. If include_node_ids is True, include_priority_levels is False,
+                                              include_scores is False, and to_str is False, returns a list of ints.
         """
 
         if not (include_node_ids or include_description):
@@ -919,26 +994,45 @@ class Goals:
         # Initialize a list to store the formatted goals
         formatted_goals = []
 
-        for priority_level, node_desc_dict in goals.items():
-            for node_id, node_desc in node_desc_dict.items():
+        def format_goal_dict(goal_dict):
+            for priority_level, node_desc_dict in goal_dict.items():
+                for node_id, node_desc in node_desc_dict.items():
+                    if include_description:
+                        goal_str = f"{str(node_id) + '. ' if include_node_ids else ''}{node_desc}"
+                    else:
+                        goal_str = f"{str(node_id) if include_node_ids else ''}"
+                    details = []
+                    if include_priority_levels:
+                        details.append(
+                            f"priority: {priority_level.split(' ')[0].lower()}"
+                        )
+                    if include_scores:
+                        score = (
+                            f"{round(100 * self.goal_scores.get(node_id, 'Not Scored') / Goals.max_progress_score, 1)}%"
+                            if progress_as_percentage
+                            else self.goal_scores.get(node_id, "Not Scored")
+                        )
+                        details.append(f"progress score: {score}")
+                    if details:
+                        goal_str += f" ({', '.join(details)})"
+                    formatted_goals.append(goal_str)
+
+        # Check if the top-level keys are round numbers
+        if all(isinstance(key, int) for key in goals.keys()):
+            for round_num, priority_dict in goals.items():
+                format_goal_dict(priority_dict)
+        # Check if the top-level keys are priority levels
+        elif all(isinstance(key, str) for key in goals.keys()):
+            format_goal_dict(goals)
+        # Assume the dictionary is node IDs mapping to descriptions
+        else:
+            for node_id, node_desc in goals.items():
                 if include_description:
                     goal_str = (
                         f"{str(node_id) + '. ' if include_node_ids else ''}{node_desc}"
                     )
                 else:
                     goal_str = f"{str(node_id) if include_node_ids else ''}"
-                details = []
-                if include_priority_levels:
-                    details.append(f"priority: {priority_level.split(' ')[0].lower()}")
-                if include_scores:
-                    score = (
-                        f"{round(100 * cls.goal_scores[node_id] / Goals.max_progress_score, 1)}%"
-                        if progress_as_percentage
-                        else cls.goal_scores[node_id]
-                    )
-                    details.append(f"progress score: {score}")
-                if details:
-                    goal_str += f" ({', '.join(details)})"
                 formatted_goals.append(goal_str)
 
         # Special case: return list of ints
