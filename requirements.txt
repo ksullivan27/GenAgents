@@ -8,5 +8,6 @@ ordered_set==4.1.0
 httpx==0.27.2
 openai==1.56.1
 
+
 # Direct downloads
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
