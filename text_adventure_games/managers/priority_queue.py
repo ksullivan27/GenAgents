@@ -74,6 +74,8 @@ class DialogueQueue:
         original_top_scoring_listener (Character or None): The original top-scoring listener.
     """
 
+    DEBUG_MODE = False
+
     def __init__(
         self, game: "Game", participants: set, decay_rate: float = 0.9
     ) -> None:
@@ -103,16 +105,18 @@ class DialogueQueue:
         # Calculate final listener scores based on weighted memory types
         self.persona_weight = 0.25
         self.response_weight = 0.375
-        self.reflection_weight = 0.125
-        self.impression_weight = 0.125
-        self.goal_weight = 0.125
+        self.reflection_weight = 0.1
+        self.impression_weight = 0.1
+        self.goal_weight = 0.175
 
-        self.percentile_threshold = 0.75  # This should be a parameter
+        self.percentile_threshold = 0.5  # TODO: Pick this hyperparameter
 
     def get_next_speaker(
         self,
         speaker: "Character",
         last_response: Union[dict[str, Union[str, int]], list[str], str, None],
+        response_splits_token_counts: Union[list[int], None] = None,
+        response_name_history: list[str] = None,
     ) -> Tuple["Character", bool]:
         """
         Get the next speaker in the dialogue priority queue.
@@ -133,7 +137,7 @@ class DialogueQueue:
                 )
                 return self.original_top_scoring_listener, True
             print("CHECKING IF SOMEONE ELSE WANTS TO SPEAK")
-            return self.priority_queue.get_next_speaker(), False
+            return self.get_adj_next_speaker(response_name_history), False
 
         if isinstance(last_response, list) and all(
             isinstance(item, dict) for item in last_response
@@ -141,7 +145,7 @@ class DialogueQueue:
             query_keywords_embeddings = Retrieve.get_query_keywords_and_embeddings(
                 game=self.game,
                 query=[split["component"] for split in last_response],
-                scores=[(0, split["importance_score"]) for split in last_response],
+                scores=[(response_splits_token_counts[i], split["importance_score"]) for i, split in enumerate(last_response)],
             )
         else:
             # Retrieve query keywords and embeddings based on the last response
@@ -199,8 +203,18 @@ class DialogueQueue:
         # Normalize the priority scores across all listeners for each memory type and score type (in-place)
         self._normalize_listener_scores(listener_scores)
 
+        if self.DEBUG_MODE:
+            print("\nNORMALIZED LISTENER SCORES")
+            for listener, scores in listener_scores.items():
+                print(listener.name + ":", scores)
+
         # Collapse the normalized scores into weighted averages for each listener and memory type (in-place)
         listener_scores = self._collapse_listener_scores(listener_scores)
+
+        if self.DEBUG_MODE:
+            print("\nCOLLAPSED LISTENER SCORES")
+            for listener, scores in listener_scores.items():
+                print(listener.name + ":", scores)
 
         # Initialize a dictionary to hold the means for each memory type
         memory_type_means = {memory_type: [] for memory_type in self.memory_types}
@@ -214,10 +228,20 @@ class DialogueQueue:
                     listener_priority_scores[memory_type] = mean_score
                     memory_type_means[memory_type].append(mean_score)
 
+        if self.DEBUG_MODE:
+            print("\nMEAN SCORES ABOVE PERCENTILE THRESHOLD")
+            for memory_type, means in memory_type_means.items():
+                print(str(memory_type) + ":", means)
+
         # Normalize the memory type means across listeners
         memory_type_means = self.normalize_means_across_listeners(
             listener_scores, memory_type_means
         )
+
+        if self.DEBUG_MODE:
+            print("\nNORMALIZED MEAN SCORES ACROSS LISTENERS")
+            for memory_type, means in memory_type_means.items():
+                print(str(memory_type) + ":", means)
 
         # Calculate the final score for each listener
         for listener_name, listener_priority_scores in listener_scores.items():
@@ -225,19 +249,17 @@ class DialogueQueue:
                 listener_priority_scores
             )
 
-        print("\nNEW LISTENER SCORES")
-        for listener, score in listener_scores.items():
-            print(listener.name + ":", round(score, 2))
+        if self.DEBUG_MODE:
+            print("\nNEW LISTENER SCORES")
+            for listener, score in listener_scores.items():
+                print(listener.name + ":", round(score, 2))
 
         # Update the priority queue with the new listener scores
         self.priority_queue.update_listeners(listener_scores)
 
-        # Print the player names and scores in the dialogue queue
-        print("\nCurrent Dialogue Queue:")
-        for listener, score in self.priority_queue.listener_map.items():
-            print(f"{listener.name}: {round(score, 2)}")
+        next_speaker = self.get_adj_next_speaker(response_name_history)
 
-        self.original_top_scoring_listener = self.priority_queue.get_next_speaker()
+        self.original_top_scoring_listener = next_speaker
 
         return self.original_top_scoring_listener, False  # Return the next speaker
 
@@ -270,6 +292,52 @@ class DialogueQueue:
         # }
         # It maps each memory type to a dict with recency, importance, and relevance scores, each of which maps to
         # either a numpy array of shape (n,), (n, 1), or (n, 2)
+
+    def get_adj_next_speaker(self, response_name_history):
+        # Temporarily adjust the scores to favor characters who have spoken less
+        adjusted_scores = {}
+        for listener, score in self.priority_queue.listener_map.items():
+            # Calculate adjustment for listeners who have spoken
+            if response_name_history and listener.name in response_name_history:
+                # Calculate weighted response count
+                weighted_response_count = sum(
+                    (1 / (index + 1))
+                    for index, name in enumerate(reversed(response_name_history))
+                    if name == listener.name
+                )
+                # Calculate adjustment based on weighted response count
+                adjustment = 0.5 / (1 + weighted_response_count)
+                adjusted_scores[listener] = score + adjustment
+            else:
+                # Give a boost to listeners who haven't spoken at all
+                adjusted_scores[listener] = (
+                    score + 0.5
+                )  # Boost for listeners who haven't spoken
+
+        # Temporarily replace the scores in the priority queue
+        original_scores = self.priority_queue.listener_map.copy()
+        self.priority_queue.listener_map = adjusted_scores
+        self.priority_queue._rebuild_heap()
+
+        # Print the player names and scores in the dialogue queue
+        # if self.DEBUG_MODE:
+        print("\nDIALOGUE QUEUE:")
+        for listener, score in self.priority_queue.listener_map.items():
+            adjustment = adjusted_scores[listener] - original_scores[listener]
+            print(f"{listener.name}: {round(score, 2)} (+{round(adjustment, 2)})")
+
+        # Get the next speaker with the adjusted scores
+        next_speaker = self.priority_queue.get_next_speaker()
+
+        # Revert the priority queue to the original scores
+        self.priority_queue.listener_map = original_scores
+        self.priority_queue._rebuild_heap()
+
+        # Remove the original top scoring listener from the priority queue
+        if next_speaker in self.priority_queue.listener_map:
+            del self.priority_queue.listener_map[next_speaker]
+
+        return next_speaker
 
     def _normalize_listener_scores(
         self, listener_scores: dict[str, dict[str, dict[str, np.ndarray]]]

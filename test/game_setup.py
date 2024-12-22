@@ -429,7 +429,7 @@ class DiscoveryGame(games.SurvivorGame):
         return world_info_prompt.discovery_basic_goal.format(**params)
 
 
-class BoardroomGame(games.SurvivorGame):
+class ConferenceGame(games.SurvivorGame):
     """
     Represents a classic game setup for the SurvivorGame.
 
@@ -493,7 +493,7 @@ class BoardroomGame(games.SurvivorGame):
     @override
     def update_world_info(self, character=None):
         """
-        Updates the world information for the boardroom game.
+        Updates the world information for the conference game.
 
         This method gathers various parameters related to the current state of the game, including the meeting name,
         topic, and participants. It formats this information into a structured string for use in the game's world
@@ -520,7 +520,7 @@ class BoardroomGame(games.SurvivorGame):
             "topic": self.topic,
             "characters": formatted_characters,
         }
-        self.world_info = world_info_prompt.boardroom_world_info.format(**params)
+        self.world_info = world_info_prompt.conference_world_info.format(**params)
 
     def update_impressions(self) -> None:
         """
@@ -729,6 +729,9 @@ class BoardroomGame(games.SurvivorGame):
         # Set goals for all characters at the beginning of the round
 
         from text_adventure_games.agent.memory_stream import MemoryType
+        
+        # for character in self.characters.values():
+        #     self.update_world_info(character=character)
 
         self.update_cognitive_functions(
             update_round=False,
@@ -765,7 +768,6 @@ class BoardroomGame(games.SurvivorGame):
         # Reset the dialogue state for all characters
         self.reset_character_dialogue()
 
-        print("~ TALKING ~")
         talk_action = talk.Talk(
             self,
             "Discuss the strategic plan for the next quarter and review of Q1 2025 results.",
@@ -1083,13 +1085,14 @@ def build_classic(
     )
 
 
-# TODO: This is a placeholder for the boardroom game. It still needs to be properly implemented.
-def build_boardroom(
+# TODO: This is a placeholder for the conference game. It still needs to be properly implemented.
+def build_conference(
     experiment_name: str = "exp1",
     experiment_id: int = 1,
     num_characters: int = 2,  # TODO: Add the actual number of characters
     max_ticks: int = 1,  # TODO: Add the actual number of ticks
     personas_path: str = ".",
+    leader: str = None,
 ) -> games.Game:
     """
     Builds and initializes a classic game.
@@ -1104,18 +1107,20 @@ def build_boardroom(
         num_characters (int, optional): The number of characters in the game. Defaults to 10.
         max_ticks (int, optional): The maximum number of game ticks. Defaults to 1.
         personas_path (str, optional): The path to the character personas. Defaults to ".".
+        leader (str, optional): The name of the leader character. Defaults to None.
 
     Returns:
         games.Game: An instance of the ClassicGame configured with the specified parameters.
     """
 
     # Build the valid starting locations for the game.
-    locs = build_boardroom_locations()  # Create game locations.
+    locs = build_conference_locations()  # Create game locations.
+    
     # Initialize an empty list to hold character instances.
     characters = []
 
-    # Assign all characters to the boardroom location.
-    location_assignments = [locs.get("boardroom")] * num_characters
+    # Assign all characters to the conference location.
+    location_assignments = [locs.get("conference")] * num_characters
 
     # Assign all characters to group D.
     group_assignments = ["D" for _ in range(num_characters)]
@@ -1125,8 +1130,6 @@ def build_boardroom(
     # Collect character data from the specified personas path.
     character_jsons = collect_game_characters(personas_path)
 
-    print("CHARACTER JSONS:", character_jsons)
-
     # Ensure the character_jsons list has enough entries by adding None if necessary.
     if len(character_jsons) < num_characters:
         diff = num_characters - len(character_jsons)  # Calculate the difference.
@@ -1134,6 +1137,10 @@ def build_boardroom(
 
     # Create character instances based on the collected persona data.
     for i, filename in enumerate(character_jsons):
+        # Skip if the index is greater than the number of characters.
+        if i >= num_characters:
+            break
+
         if not filename:
             # Create a default persona if no filename is provided.
             persona = build_agent(
@@ -1141,30 +1148,39 @@ def build_boardroom(
                 facts_new=True,
             )
         else:
+            # Get the character info path from the filename.
+            character_info_path = os.path.join(os.path.dirname(os.path.dirname(filename)), "General")
             # Import the persona from the file.
-            persona = Persona.import_persona(filename)
+            persona = Persona.import_persona(filename=filename, character_info_path=character_info_path)
 
         # Create a character instance with the persona and assigned group.
         character = GenerativeAgent(persona, group_assignments[i])
 
-        print("PERSONA:", persona)
-        print("GROUP:", group_assignments[i])
-        print("CHARACTER:", character)
-
-        location = location_assignments[i]
-        location.add_character(character)
-        characters.append(character)
-
-        # Print the character's starting information.
         print(
-            f"Character {character.name} starts at {location.name} and belongs to Group {group_assignments[i]}"
+            "Adding",
+            character.name,
+            f"(group {group_assignments[i]})"
         )
 
-    # Remove the first character from the list to designate them as the player.
-    player = characters.pop(0)
+        location = location_assignments[i]
 
-    # Return an instance of the BoardroomGame with the specified parameters.
-    return BoardroomGame(
+        location.add_character(character)
+
+        characters.append(character)
+
+    # Create a dictionary of characters for quick lookup.
+    character_dict = {character.name: character for character in characters}
+    
+    # Set the player character.
+    if leader is None:
+        player = characters.pop(0)
+    elif leader in character_dict:
+        player = character_dict[leader]
+    else:
+        raise ValueError(f"Leader {leader} not found in characters")
+
+    # Return an instance of the ConferenceGame with the specified parameters.
+    return ConferenceGame(
         start_at,  # The starting location of the game.
         player,  # The player character.
         characters,  # The list of other characters in the game.
@@ -1209,7 +1225,6 @@ def collect_game_characters(personas_path, partition: List[str] = None):
         for filename in os.listdir(personas_path):
             # Check if the file has a .json extension.
             if filename.endswith(".json"):
-                print("Adding character file: ", filename)
                 # Construct the full path to the character file.
                 character_path = os.path.join(personas_path, filename)
                 # If partitions are specified, categorize the character files accordingly.
@@ -1618,7 +1633,7 @@ def build_mini_discovery(
     )
 
 
-def build_boardroom_locations():
+def build_conference_locations():
     """
     Builds and initializes the game locations.
 
@@ -1632,17 +1647,17 @@ def build_boardroom_locations():
     """
 
     # Create various locations for the game with descriptions.
-    boardroom = things.Location(
-        "Boardroom", "the boardroom where the meetings take place."
+    conference = things.Location(
+        "Conference", "the conference where the meetings take place."
     )  # The main base for the tribe.
 
     # Set properties for the jungle location.
-    # There are no properties for the boardroom
+    # There are no properties for the conference
 
     # Add a connections
-    # There are no connections for the boardroom
+    # There are no connections for the conference
 
     # Return a dictionary of all initialized locations, ensuring the jungle is not a starting point.
     return {
-        "boardroom": boardroom,
+        "conference": conference,
     }

@@ -177,7 +177,7 @@ class Parser:
         print(f"\n{Parser.wrap_text(description)}")
 
     @staticmethod
-    def wrap_text(text: str, width: int = 120) -> str:
+    def wrap_text(text: str, width: int = 110) -> str:
         """
         Wraps the given text to a specified width for better readability.
 

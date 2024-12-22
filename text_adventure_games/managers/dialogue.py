@@ -96,8 +96,8 @@ class Dialogue:
     logger = None  # Class-level attribute to store the logger
     gpt_handler = None  # Class-level attribute to store the shared GPT handler
     model_params = {
-        "max_output_tokens": 3000,
-        "temperature": 1,
+        "max_output_tokens": 5000,
+        "temperature": 0.8,
         "top_p": 1,
         "max_retries": 5,
     }
@@ -204,6 +204,9 @@ class Dialogue:
         # Store the characters who are ready to leave the dialogue
         self.ready_to_leave = set()
 
+        # List of the previous speakers in the dialogue, in order
+        self.response_name_history = []
+
         # Get the initial command
         initial_command = (
             self.command
@@ -221,13 +224,15 @@ class Dialogue:
         # TODO: Experiment with different short-term memory limits (e.g. 15 minutes)
         self.dialogue_short_term_memory_token_limit = np.min(
             [
-                (200 * 4),  # tokens per minute x minutes of short-term memory
+                (200 * 5),  # tokens per minute x minutes of short-term memory
                 self.working_context_limit,  # maximum token limit
             ]
         )
 
-        # Initialize the memory-dialogue ratio (used to calculate memory and dialogue token limits)
+        # Initialize the memory-dialogue ratio (used to allocate memory and dialogue token limits)
         self.memory_dialogue_ratio = 1
+
+        # Below is the structure of the responses_keywords_embeddings dictionary after adding scores to the embeddings.
 
         # dict[str, Union[OrderedDict[str, Tuple[Tuple(float, int), np.ndarray]], Dict[str, np.ndarray]]]
         # {
@@ -281,8 +286,8 @@ class Dialogue:
             for character in self.participants
         }
 
-        # TODO: Set this to 10 minutes (currently 3 for testing)
-        self.update_cognitive_functions_every = 3 * 200  # 3 minutes
+        # TODO: Set this to 10 minutes (currently 5 for testing)
+        self.update_cognitive_functions_every = 5 * 200  # 5 minutes
 
         # Calculate the token count since the last cognitive functions update occurred (it happens every 10 minutes)
         self.token_count_since_last_cognitive_update = get_prompt_token_count(
@@ -334,7 +339,7 @@ class Dialogue:
             include_perceptions=True,
             include_impressions=True,
         )  # TODO: In the future, modify to only get impressions of mentioned characters. In the meantime, this is fine
-        # Since all characters are participants in the boardroom dialogue
+        # Since all characters are participants in the conference dialogue
 
         # Construct a string of dialogue instructions by joining the names of other participants
         other_characters_list = [
@@ -423,10 +428,10 @@ class Dialogue:
         if memories := Retrieve.retrieve(
             game=self.game,
             character=character,
-            query=self.responses_keywords_embeddings,
+            query=self.responses_keywords_embeddings,  # TODO: Do we want to use the full history of keywords to retrieve memories?
             sort_nodes=False,
             weighted=True,
-            max_tokens=available_tokens,
+            max_tokens=available_tokens,  # TODO: There may be a better way to limit memories based on their scores without maxing out the token limit
             prepend="\n- ",
             memory_types=[
                 MemoryType.ACTION,
@@ -541,6 +546,9 @@ class Dialogue:
             None: This method does not return a value. It modifies the internal state of the dialogue history and memory
             structures.
         """
+        # Increment the response count for the character
+        self.response_name_history.append(speaker.name)
+
         # Initialize the maximum memory importance score
         # The highest importance score from the current response is used to score the importance of the overall summary
         # of the response, which is a separate text from the response itself
@@ -568,22 +576,24 @@ class Dialogue:
                 game=self.game, query=response_split["component"]
             )
 
-            # Combine the 'keywords' dictionaries
+            # Update the keyword dictionaries in the responses_keywords_embeddings dictionary (maps keywords to embeddings)
             for keyword_type, keywords_dict in query_keywords_embeddings[
                 "keywords"
             ].items():
+                # If the keyword type is not already in the responses_keywords_embeddings dictionary, add it
                 if keyword_type not in self.responses_keywords_embeddings["keywords"]:
                     self.responses_keywords_embeddings["keywords"][keyword_type] = {}
+                # Update the keyword type dictionary with the new keywords
                 self.responses_keywords_embeddings["keywords"][keyword_type].update(
                     keywords_dict
                 )
 
-            # Combine the 'embeddings' default dictionaries
+            # Update the embeddings dictionary in the responses_keywords_embeddings ordered dictionary (maps queries to embeddings)
             for query, embedding in query_keywords_embeddings["embeddings"].items():
                 self.responses_keywords_embeddings["embeddings"][query] = (
                     (
-                        self.dialogue_duration - self.remaining_time,
-                        response_split["importance_score"],
+                        self.dialogue_duration - self.remaining_time,  # recency score
+                        response_split["importance_score"],  # importance score
                     ),
                     embedding,
                 )
@@ -593,7 +603,7 @@ class Dialogue:
             # dialogue_history_messages_dict values map to their respective memories directly (remember, add_memory
             # returns the assigned memory node id).
 
-            # Add the response to the character's memories
+            # Add the response to the speaker's memories
             speaker.memory.add_memory(
                 round=self.game.round,
                 tick=self.game.tick,
@@ -622,6 +632,7 @@ class Dialogue:
 
         # Add the response and token counts to the players' dialogue history messages dictionaries
         for character in self.participants:
+            # If the character is not the speaker
             if character.name != speaker.name:
                 self.dialogue_history_messages_dict[character.name]["messages"].append(
                     {
@@ -629,15 +640,14 @@ class Dialogue:
                         "content": f"{speaker.name}: {response_dict['response']}",
                     }
                 )
-                self.dialogue_history_messages_dict[character.name][
-                    "token_count"
-                ].append(
+                self.dialogue_history_messages_dict[character.name]["token_count"].append(
                     get_prompt_token_count(
                         content=f"{speaker.name}: {response_dict['response']}",
                         role="user",
                         pad_reply=False,
                     )
                 )
+            # If the character is the speaker
             else:
                 self.dialogue_history_messages_dict[character.name]["messages"].append(
                     {
@@ -645,9 +655,7 @@ class Dialogue:
                         "content": response_dict["response"],
                     }
                 )
-                self.dialogue_history_messages_dict[character.name][
-                    "token_count"
-                ].append(
+                self.dialogue_history_messages_dict[character.name]["token_count"].append(
                     get_prompt_token_count(
                         content=response_dict["response"],
                         role="assistant",
@@ -904,6 +912,7 @@ class Dialogue:
         Returns:
             dict: The generated response from the GPT model, or None if an error occurs.
         """
+
         # Get the system message and its token count
         system_messages, system_messages_token_count = self.get_sys_message(
             character=character,
@@ -983,6 +992,13 @@ class Dialogue:
             if response.response_splits
             else []
         )
+        response_dict["response_splits_token_counts"] = []
+        cumulative_count = 0
+        if response.response_splits:
+            for split in response.response_splits:
+                token_count = get_prompt_token_count(content=split.component, role=None, pad_reply=False)
+                cumulative_count += token_count
+                response_dict["response_splits_token_counts"].append(cumulative_count)
 
         # Subtract the token count of the response from the remaining time
         self.remaining_time -= (1 / 200) * get_prompt_token_count(
@@ -1076,7 +1092,9 @@ class Dialogue:
             if response != -999:
                 # Get the next speaker in the dialogue
                 speaker, forced_to_speak = self.dialogue_queue.get_next_speaker(
-                    speaker=speaker, last_response=response_dict["response_splits"]
+                    speaker=speaker, last_response=response_dict["response_splits"],
+                    response_splits_token_counts=response_dict["response_splits_token_counts"],
+                    response_name_history=self.response_name_history
                 )
 
                 print("New Speaker:", speaker.name)

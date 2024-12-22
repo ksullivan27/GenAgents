@@ -337,7 +337,7 @@ class Goals:
 
         # Retrieve the standard information about the character from the game, excluding goals and perceptions.
         system_prompt = self.character.get_standard_info(
-            game, include_goals=False, include_perceptions=False
+            game, include_goals=False, include_perceptions=False, include_impressions=True
         )
 
         # Append the predefined goals prompt to the character's standard information to form the complete system prompt.
@@ -642,11 +642,11 @@ class Goals:
         # Iterate through the goals for the current round
         for priority, goals in goals_dict.items():
             # Set the importance of the goal based on its priority
-            if priority == "Low Priority":
+            if priority.lower() == "low" or priority.lower() == "low priority" or priority.lower() == "low_priority":
                 ref_importance = 8
-            elif priority == "Medium Priority":
+            elif priority.lower() == "medium" or priority.lower() == "medium priority" or priority.lower() == "medium_priority":
                 ref_importance = 9
-            elif priority == "High Priority":
+            elif priority.lower() == "high" or priority.lower() == "high priority" or priority.lower() == "high_priority":
                 ref_importance = 10
             else:
                 # If the priority level is unknown, set the importance to 9 and log an error
@@ -660,7 +660,7 @@ class Goals:
 
             for goal in goals:
 
-                # Summarize and score the action described in the statement, obtaining keywords and importance
+                # Summarize and score the goal, obtaining keywords and importance
                 _, _, ref_kwds = game.parser.summarize_and_score_action(
                     description=goal,
                     thing=self.character,
@@ -672,9 +672,9 @@ class Goals:
                 node_id = self.character.memory.add_memory(
                     game.round,
                     game.tick,
-                    goal,
-                    ref_kwds,
-                    self.character.location.name,
+                    description=goal,
+                    keywords=ref_kwds,
+                    location=self.character.location.name,
                     success_status=True,
                     memory_importance=ref_importance,
                     memory_type=MemoryType.GOAL.value,

@@ -257,6 +257,7 @@ class Retrieve:
         # Initialize the GPT handler if it hasn't been set up yet
         cls.initialize_gpt_handler()
 
+        # If not looking back across all memories
         if memory_lookback != -1:
 
             # Gather keywords for searching relevant memory nodes based on the game and character context.
@@ -276,6 +277,7 @@ class Retrieve:
                 threshold=threshold,
             )
 
+        # If looking back across all memories, retrieve all memories of the specified types
         else:
             memory_node_ids = character.memory.get_observations_by_type(
                 obs_type=memory_types
@@ -304,6 +306,7 @@ class Retrieve:
             weighted=weighted,
         )
 
+        # Format the ranked memory IDs
         ranked_memory_scores = cls.format_node_scores(
             character=character,
             node_scores=ranked_memory_ids,
@@ -312,6 +315,7 @@ class Retrieve:
             prepend=prepend,
         )
 
+        # Trim the memory scores based on the specified criteria
         ranked_memory_scores = cls.trim_memory_scores(
             memory_scores=ranked_memory_scores,
             sort_nodes=sort_nodes,
@@ -520,6 +524,11 @@ class Retrieve:
         Returns:
             List[tuple[float, int]]: A list of tuples containing total scores and their corresponding node IDs.
         """
+        if cls.DEBUG_MODE:
+            print(f"Query: {query}")
+            print(f"Node IDs: {node_ids}")
+            for id in node_ids:
+                print(f"Memory Description: {id}. {character.memory.observations[id].node_description}")
 
         # Calculate the recency score for each memory node based on the character's memory
         recency = Retrieve._calculate_node_recency(
@@ -538,7 +547,7 @@ class Retrieve:
         )
 
         # Calculate the relevance score for each memory node in relation to the provided query
-        relevance = Retrieve._calculate_node_relevance(
+        relevance, relevant_indices = Retrieve._calculate_node_relevance(
             character=character,
             memory_ids=node_ids,
             query=query,
@@ -549,10 +558,15 @@ class Retrieve:
             weighted=weighted,
         )
 
-        # Scale the raw scores by the character's memory weights for recency, importance, and relevance
-        recency = MemoryStream.recency_alpha * recency
-        importance = MemoryStream.importance_alpha * importance
-        relevance = MemoryStream.relevance_alpha * relevance
+        # Only keep the scores of the relevant memory nodes with scores above the threshold
+        recency = recency[relevant_indices]
+        importance = importance[relevant_indices]
+        relevance = relevance[relevant_indices]
+
+        if cls.DEBUG_MODE:
+            print(f"Recency: {recency}")
+            print(f"Importance: {importance}")
+            print(f"Relevance: {relevance}")
 
         # If separate scores are requested, return the recency, importance, and relevance scores separately
         if separate_scores:
@@ -576,7 +590,10 @@ class Retrieve:
             relevance = np.sum(relevance, axis=1)
 
         # Calculate the total score by summing the scaled scores
-        total_score = recency + importance + relevance
+        # Scale the raw scores by the character's memory weights for recency, importance, and relevance
+        total_score = (MemoryStream.recency_alpha * recency) + \
+            (MemoryStream.importance_alpha * importance) + \
+            (MemoryStream.relevance_alpha * relevance)
 
         # Combine total scores with their corresponding node IDs into tuples and return
         return list(zip(total_score, node_ids))
@@ -705,7 +722,7 @@ class Retrieve:
         standardize: bool = True,
         minmax_scale: bool = True,
         weighted: bool = False,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, list[int]]:
         """
         Calculate the relevance scores of memory nodes based on their similarity to a given query.
         This function uses embeddings to assess how closely related each memory node is to the query or to default
@@ -724,7 +741,8 @@ class Retrieve:
             weighted (bool): Whether to use weighted retrieval. Defaults to False.
 
         Returns:
-            ndarray: An array of normalized relevance scores for the specified memory nodes, scaled between 0 and 1.
+            tuple[ndarray, list[int]]: A tuple containing an array of relevance scores and a list of indices of the ones
+                                       that are above the threshold.
         """
 
         # {'embeddings': {'query': embedding}, 'keywords': {'kw_type': {'keyword': embedding}}}
@@ -759,6 +777,9 @@ class Retrieve:
             default_embeddings = character.memory.get_query_embeddings()
             relevances = cosine_similarity(memory_embeddings, default_embeddings)
 
+        # get indices of scores above 0.4
+        relevant_indices = [i for i, score in enumerate(relevances) if np.any(score >= 0.4)]
+
         if weighted:
             # Get the weights for each query embedding
             weights = [
@@ -774,14 +795,14 @@ class Retrieve:
                 for embedding in query["embeddings"].values()
             ]
 
-            # Take a weighted average of the recency and importance weights for each query embedding
-            recency_scaler = 0.5
-            importance_scaler = 0.5
+            # # Take a weighted average of the recency and importance weights for each query embedding
+            # recency_scaler = 0.5
+            # importance_scaler = 0.5
 
-            weights = [
-                (recency_scaler * weight[0], importance_scaler * weight[1])
-                for weight in weights
-            ]
+            # weights = [
+            #     (recency_scaler * weight[0], importance_scaler * weight[1])
+            #     for weight in weights
+            # ]
 
         # Get aggregated relevance scores across all queries
         scored_relevances = Retrieve._score_cos_sim(
@@ -807,7 +828,7 @@ class Retrieve:
         #     scored_relevances = Retrieve._minmax_normalize(scored_relevances, 0, 1)
 
         # Return the scored relevance scores as a numpy array
-        return np.array(scored_relevances)
+        return np.array(scored_relevances), relevant_indices
 
     @classmethod
     def _get_relevant_memory_ids(
@@ -1222,7 +1243,7 @@ class Retrieve:
                                      memory nodes and q is the number of queries.
             percentile (float): The percentile threshold (e.g., 0.9) to filter the scores.
             method (Literal["mean", "median"]): The method to use for aggregation ('mean' or 'median').
-            weights (np.ndarray | None): An array of shape (m) containing weights for each memory node.
+            weights (np.ndarray | None): An array of shape (m) containing weights for each query.
 
         Returns:
             np.ndarray: An array of shape (m) with the aggregated scores.
@@ -1241,6 +1262,7 @@ class Retrieve:
 
         # If weights are provided, multiply the filtered scores by their respective weights
         if weights is not None:
+
             # Get the indices of the scores that are above the threshold
             filtered_indices = np.array(
                 [
@@ -1348,7 +1370,6 @@ class Retrieve:
             list or None: A list of memory node descriptions or indexed descriptions, or None if no relevant memory
                           nodes are found.
         """
-
         if circular_import_prints:
             print("-\tInitializing Retrieve")
 
@@ -1439,7 +1460,8 @@ class Retrieve:
         Args:
             game (Game): The game context that provides parsing capabilities for extracting keywords.
             query (Union[List[str], str]): A list of query strings or a single query string to be converted.
-            scores (List[Union[int, Tuple[int], Tuple[float, int]]] | None): A list of importance scores for the queries.
+            scores (List[Union[int, Tuple[int], Tuple[float, int]]] | None): A list of recency and importance scores for
+                                                                            the queries.
 
         Returns:
             dict[str, Union[dict[str, dict[str, np.ndarray]], OrderedDict[str, Union[np.ndarray, Tuple[Union[int, Tuple[float, int]], np.ndarray]]]]]:

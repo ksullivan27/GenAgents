@@ -54,11 +54,11 @@ discovery_world_info = (
     "Act wisely and swiftly to collect as many idols as you can!"
 )
 
-boardroom_world_info = (
-    "You are seated at a boardroom meeting for {meeting_name}, discussing {topic}. Also present are: "
+conference_world_info = (
+    "You are seated at a conference meeting for {meeting_name}, discussing {topic}. Also present are: "
     "{characters}. Having carefully read through the provided documents, you prepare talking points, "
     "arguments, and counterarguments for the meeting. Once the meeting starts, you will be given a chance to speak. "
-    "Your goal is to present your case and sway the other board members to your side."
+    "Your goal is to present your case and sway the other conference members to your side."
 )
 
 discovery_basic_goal = (

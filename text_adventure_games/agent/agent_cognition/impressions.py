@@ -248,7 +248,7 @@ class Impressions:
         for target, impression in self.impressions.items():
             # If as_str is True, format the impression message
             if as_str:
-                formatted_impression = f"{prefix}{target}: {impression['impression']}"
+                formatted_impression = f"{prefix}{target.name}: {impression['impression']}".strip()
                 all_impressions.append(formatted_impression)
             else:
                 # Extract the character name from the key and map it to the impression
@@ -377,6 +377,26 @@ class Impressions:
                     "creation": game.total_ticks,  # The total ticks at the time of impression creation
                 }
             }
+        )
+
+        # Summarize and score the impression, obtaining keywords and importance
+        _, importance, ref_kwds = game.parser.summarize_and_score_action(
+            description=impression_str,
+            thing=self.character,
+            needs_summary=False,
+            needs_score=True,
+        )
+
+        self.character.memory.add_memory(
+            game.round,
+            game.tick,
+            description=impression_str,
+            keywords=ref_kwds,
+            location=self.character.location.name,
+            success_status=True,
+            memory_importance=importance,
+            memory_type=MemoryType.IMPRESSION.value,
+            actor_id=self.character.id,
         )
 
     def gpt_generate_impression(self, system_prompt, user_prompt, game, target) -> str:
@@ -617,6 +637,13 @@ class Impressions:
                 character=self.character,
                 query=f"I want to remember everything I know about {target.name}",
                 n=-1,
+                memory_types=[
+                    MemoryType.ACTION,
+                    MemoryType.DIALOGUE,
+                    MemoryType.REFLECTION,
+                    MemoryType.PERCEPT,
+                    
+                ],
             )
             self.chronological = False  # Set the chronological flag to False
             target_impression_tkns = 0  # No tokens to count for the impression

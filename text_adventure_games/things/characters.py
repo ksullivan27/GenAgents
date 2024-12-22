@@ -14,7 +14,7 @@ from .base import Thing
 
 # Import the 'Item' class from the items module to represent items in the game.
 if circular_import_prints:
-        print(f"\t{__name__} calling imports for Items")
+    print(f"\t{__name__} calling imports for Items")
 from .items import Item
 
 # Import MemoryStream and MemoryType from the agent.memory_stream module for managing agent memory.
@@ -61,6 +61,7 @@ GROUP_MAPPING = {
     "D": (True, True),
     "E": (False, False),
 }
+
 
 class Character(Thing):
     """
@@ -425,7 +426,9 @@ class GenerativeAgent(Character):
             # Update the last dialogue participant to the provided character
             self.last_talked_to = {talked_to}
         # Check if the input is a set of Character instances
-        elif isinstance(talked_to, set) and all(isinstance(char, Character) for char in talked_to):
+        elif isinstance(talked_to, set) and all(
+            isinstance(char, Character) for char in talked_to
+        ):
             # Update the last dialogue participants to the provided set of characters
             self.last_talked_to = talked_to
         # If the input is neither None, a valid Character, nor a valid set of Characters, raise an error
@@ -493,7 +496,13 @@ class GenerativeAgent(Character):
         # Return the formatted string of perception descriptions, joining them with new lines.
         return context_list_to_string(perception_descriptions, sep="\n")
 
-    def get_standard_info(self, game, include_goals=True, include_perceptions=True, include_impressions=False):
+    def get_standard_info(
+        self,
+        game,
+        include_goals=True,
+        include_perceptions=True,
+        include_impressions=False,
+    ):
         """
         Generate a standard summary of the agent's current context within the game.
         This method provides information about the game world, the agent's persona, and optionally includes goals and
@@ -511,7 +520,7 @@ class GenerativeAgent(Character):
             include_perceptions (bool, optional): Whether to include the agent's perceptions in the summary. Default is
                                                   True.
             include_impressions (bool, optional): Whether to include the agent's impressions in the summary. Default is
-                                                  True.
+                                                  False.
 
         Returns:
             str: A formatted summary string containing the agent's context.
@@ -521,7 +530,7 @@ class GenerativeAgent(Character):
         summary = f"WORLD INFO:\n{game.world_info}"
 
         # Add the agent's personal summary to the summary
-        summary += f"\n\nPERSONAL INFO:\nYou are {self.persona.get_personal_summary()}."
+        summary += f"\n\nPERSONAL INFO:\n{self.persona.get_personal_summary()}"
 
         # Check if the agent uses goals and if goals should be included in the summary
         if self.use_goals and include_goals:
@@ -530,24 +539,24 @@ class GenerativeAgent(Character):
 
             # Retrieve the current goals for the agent based on the current game round, appending them to the summary.
             if goals := self.get_goals(round=game.round, as_str=True):
-                summary += f"\n\nPERSONAL GOALS:\n{goals}"
+                summary += f"\n\nPERSONAL GOALS:\n- {goals.replace('\n', '\n- ')}"
 
         # Check if perceptions should be included and if there are any last location observations
         if include_perceptions and self.last_location_observations:
             # Parse the agent's perceptions into a readable format, appending them to the summary.
             if perceptions := self._parse_perceptions():
-                summary += f"\n\nCURRENT PERCEPTIONS:\n{perceptions}"
+                summary += f"\n\nCURRENT PERCEPTIONS:\n- {perceptions.replace('\n', '\n- ')}"
 
         if self.use_impressions and include_impressions:
-            if impressions := self.impressions.get_impressions(as_str=True, prefix="\n\n"):
-                summary += f"\n\nCURRENT IMPRESSIONS:{impressions}"
+            if impressions := self.impressions.get_impressions(
+                as_str=True, prefix="\n\n"
+            ):
+                summary += f"\n\nCURRENT IMPRESSIONS:\n{impressions}"
 
         # Return the complete summary string
         return summary
 
-    def get_goals(
-        self, round=-1, priority="all", as_str=False, include_scores=False
-    ):
+    def get_goals(self, round=-1, priority="all", as_str=False, include_scores=False):
         """
         Retrieve the agent's current goals based on the specified round and priority.
         This method returns the goals if the agent is configured to use them; otherwise, it returns None.
@@ -728,6 +737,117 @@ class GenerativeAgent(Character):
 
             # Update the agent's impression of the target character based on the current game context
             self.impressions.update_impression(game, target)
+
+    def add_persona_to_memories(self, game) -> None:
+        """
+        Add persona-related memories to the agent's memory stream.
+
+        This method iterates through the agent's persona attributes, which include a summary, facts, and traits.
+        For each component, it processes the text to generate a summary and importance score, and then adds
+        the component to the agent's memory.
+
+        Args:
+            self: The instance of the agent.
+            game: The current game object containing the game state.
+
+        Returns:
+            None
+        """
+
+        # Iterate over the persona attributes
+        for key in ["persona_summary", "persona_facts", "persona_traits"]:
+
+            # Get the text for the current persona attribute
+            text = getattr(self.persona, key)
+
+            # Split the text into components and iterate over them
+            for component in MemoryStream.split_text(f"{self.name}: {text}", self, game):
+
+                summary, importance, ref_kwds = game.parser.summarize_and_score_action(
+                    description=f"{self.name}: {component['component']}",
+                    thing=self,
+                    needs_summary=False,
+                    needs_score=False,
+                )
+
+                # Add the response to the speaker's memories
+                self.memory.add_memory(
+                    round=game.round,
+                    tick=game.tick,
+                    description=component['component'],
+                    keywords=ref_kwds,
+                    location=self.location.name,
+                    success_status=True,
+                    memory_importance=component['importance_score'],
+                    memory_type=MemoryType.PERSONA.value,
+                    actor_id=self.id,
+                )
+
+    def add_other_characters_info_to_memories(self, game) -> None:
+        """
+
+        """
+
+        # Split the string into lines and iterate over them
+        for line in self.persona.other_characters_info.splitlines():
+
+            # Get the reference keywords for the line
+            summary, importance, ref_kwds = game.parser.summarize_and_score_action(
+                description=line,
+                thing=self,
+                needs_summary=False,
+                needs_score=False,
+            )
+
+            # Add the response to the speaker's memories
+            self.memory.add_memory(
+                round=game.round,
+                tick=game.tick,
+                description=line,
+                keywords=ref_kwds,
+                location=self.location.name,
+                success_status=True,
+                memory_importance=10,
+                memory_type=MemoryType.REFLECTION.value,
+                actor_id=self.id,
+            )
+
+    def add_goals_to_memories(self, game: "Game") -> None:
+        """
+        Adds the character's goals to their memory.
+
+        This method iterates over the character's goals categorized by priority levels and adds each goal to the
+        their memory. The importance of each goal is determined based on its priority level.
+
+        Args:
+            game (Game): The current game instance used to access round information and manage game state.
+
+        Returns:
+            None
+        """
+
+        self.goals.update_goals(
+            game, goals_dict=self.persona.personal_goals
+        )
+
+    def initialize_character_memories(self, game: "Game") -> None:
+        """
+        Initializes the character's memories by adding various components to their memory.
+
+        This method aggregates different aspects of the character's persona, other characters' information,
+        and personal goals into the character's memory. It serves as a central point for memory initialization
+        at the start of a game round.
+
+        Args:
+            game (Game): The current game instance used to access round information and manage game state.
+
+        Returns:
+            None
+        """
+
+        self.add_persona_to_memories(game)
+        self.add_other_characters_info_to_memories(game)
+        self.add_goals_to_memories(game)
 
     def to_primitive(self):
         """

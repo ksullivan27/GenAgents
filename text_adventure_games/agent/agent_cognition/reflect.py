@@ -466,8 +466,7 @@ class Reflect:
         is malformed (i.e., missing the statement), it is skipped without any changes.
 
         Args:
-            generalization (Dict): A dictionary containing the generalization data,
-                                   including a "statement" key.
+            generalization (Dict): A dictionary containing the generalization data, including a "statement" key.
 
         Returns:
             None: This function does not return a value.

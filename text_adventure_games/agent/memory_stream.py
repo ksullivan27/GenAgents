@@ -50,6 +50,10 @@ if circular_import_prints:
     print(f"\t{__name__} calling Type Checking imports for GptHelpers")
 from ..gpt.gpt_helpers import GptCallHandler
 
+if circular_import_prints:
+    print(f"\t{__name__} calling imports for Prompts")
+from ..assets.prompts import prompt_classes
+
 if TYPE_CHECKING:
     if circular_import_prints:
         print(f"\t{__name__} calling Type Checking imports for Character")
@@ -147,12 +151,12 @@ class MemoryStream:
     gpt_handler = None  # Class-level attribute to store the shared GPT handler
 
     model_params = {
-        # "max_output_tokens": 256,
-        # "temperature": 1,
-        # "top_p": 1,
-        # "max_retries": 5,
+        "max_output_tokens": 1500,
+        "temperature": 1,
+        "top_p": 1,
+        "max_retries": 5,
     }
-    
+
     # Attributes for calculating relevancy scores
     importance_alpha = 0.4  # Weight for importance in relevancy scoring
     recency_alpha = 0.2  # Weight for recency in relevancy scoring
@@ -204,6 +208,59 @@ class MemoryStream:
                 model_config_type="miscellaneous", **cls.model_params
             )
 
+    @staticmethod
+    def split_text(text: str, character: "Character", game: "Game") -> List[prompt_classes.ResponseComponent]:
+        """
+        Splits the input text into a list of ResponseComponent objects.
+
+        This method utilizes the GPT handler to process the input text and generate a list of ResponseComponent
+        objects. Each ResponseComponent contains brief, contextually-encapsulated, non-overlapping, near-verbatim
+        sections of the response, along with associated importance scores related to the overall meeting agenda.
+
+        The method ensures that each complete thought is represented in exactly one ResponseComponent. It also
+        replaces demonstrative pronouns and adjectives with their corresponding nouns to avoid ambiguity.
+
+        Args:
+            text (str): The input text to be processed and split into response components.
+            character (Character): The character object containing identifying information for the agent.
+            game (Game): The game object containing the game state.
+
+        Returns:
+            List[prompt_classes.ResponseComponent]: A list of ResponseComponent objects generated from the input text.
+        """
+
+        # Initialize the GPT handler if it hasn't been set up yet
+        if not MemoryStream.gpt_handler:
+            MemoryStream.initialize_gpt_handler()
+
+        response = MemoryStream.gpt_handler.generate(
+            character=character,
+            game=game,
+            system=f"You are a helpful assistant who takes an input text and returns a list of ResponseComponent "
+            "objects, each containing brief, contextually-encapsulated, non-overlapping, near-verbatim sections of the "
+            "response (usually a few highly related sentences), along with associated importance scores in regard to "
+            "the overall meeting agenda (scores range from 1 to {GptCallHandler.max_importance_score}, inclusive). "
+            "Each complete thought must be represented in exactly one ResponseComponent. Replace demonstrative pronouns "
+            "and demonstrative adjectives (e.g. 'he' becomes 'John' and 'this' becomes 'the report') with their "
+            "corresponding nouns, especially if the reference is ambiguous – for instance if it is referring to an "
+            "object or a person in a different response split. Each needs to stand on its own as a complete thought.",
+            user=text,
+            response_format=prompt_classes.ResponseSummary,
+        )
+
+        # Return a list of response splits
+        return (
+            [
+                {
+                    "component": response.response_splits[i].component,
+                    "importance_score": response.response_splits[i].importance_score,
+                }
+                for i in range(len(response.response_splits))
+            ]
+            if response.response_splits
+            else []
+        )
+
     def __init__(self, character: "Character"):
         """
         Initializes an agent with identifying information and memory features.
@@ -234,7 +291,8 @@ class MemoryStream:
         """
 
         # Initialize the GPT handler if it hasn't been set up yet
-        MemoryStream.initialize_gpt_handler()
+        if not MemoryStream.gpt_handler:
+            MemoryStream.initialize_gpt_handler()
 
         if circular_import_prints:
             print(f"-\tInitializing MemoryStream")

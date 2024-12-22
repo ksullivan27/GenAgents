@@ -41,7 +41,7 @@ from openai import OpenAI
 # from kani.engines.openai import OpenAIEngine
 
 # # Importing GptCallHandler from gpt.gpt_helpers for handling GPT call counts.
-# from GenAgentsBoardroom.text_adventure_games.gpt.gpt_helpers import GptCallHandler
+# from GenAgents.text_adventure_games.gpt.gpt_helpers import GptCallHandler
 
 # Local imports from the current package, specifically constants used in the module.
 if circular_import_prints:
